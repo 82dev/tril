@@ -1,5 +1,2 @@
-fn main(){
-  let i = 12;
-  let x = "hello world";
-  puts(x);
-}
+let x = 32;
+//x has primitive type {integer} which gets resolved to i32?

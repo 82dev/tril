@@ -30,7 +30,7 @@ impl Lexer{
     while !self.is_at_end(){
       self.scan_token();
     }
-    self.add_token(TokenKind::EOF);
+    // self.add_token(TokenKind::EOF);
 
     return self.tokens;
   }
@@ -52,6 +52,18 @@ impl Lexer{
       ';' => self.add_token(TokenKind::Semicolon),
 
       '=' => self.add_token(TokenKind::Assignment),
+
+      '+' => self.add_token(TokenKind::Plus),
+      '-' => self.add_token(TokenKind::Minus),
+      '*' => self.add_token(TokenKind::Asterisk),
+      '/' => {
+        if self.source[self.pos] == '/' {
+          while self.advance() != '\n' && !self.is_at_end(){}
+        }
+        else{
+          self.add_token(TokenKind::FSlash)
+        }
+      },
 
       '"' => self.string(),
       

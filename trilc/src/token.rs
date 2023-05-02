@@ -17,10 +17,15 @@ pub enum TokenKind{
 
   Assignment,
 
+  Plus,
+  Minus,
+  Asterisk,
+  FSlash,
+
   Let,
   FunctionDec,
 
-  EOF,
+  // EOF,
 }
 
 pub struct Token{
