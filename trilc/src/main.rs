@@ -5,13 +5,14 @@ mod nodes;
 
 use std::{env, fs};
 
-use crate::lexer::Lexer;
+use crate::{lexer::Lexer, parser::Parser};
 
 fn main() {
   let args: Vec<String> = env::args().collect();
 
   if args.len() < 2{
-    todo!("Print usge");
+    println!("{:?}", args);
+    todo!("Print usage");
   }
   
   let file_path = &args[1];
@@ -21,8 +22,6 @@ fn main() {
   println!("{}", contents);
 
   let tok = Lexer::new(contents).tokenize();
-  
-  println!("{:?}", tok);  
-
-  
+  println!("{:?}", tok);
+  println!("{:?}", Parser::new(tok).parse());
 }

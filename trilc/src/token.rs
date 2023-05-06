@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 #[derive(Debug)]
 #[derive(PartialEq)]
+#[derive(Clone)]
 pub enum TokenKind{
   Identifier(String),
   Number(f32),
@@ -29,9 +30,9 @@ pub enum TokenKind{
 }
 
 pub struct Token{
-  kind: TokenKind,
-  line: usize,
-  col : usize,
+  pub kind: TokenKind,
+  pub line: usize,
+  pub col : usize,
 }
 
 impl Token{
