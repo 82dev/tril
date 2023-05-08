@@ -51,6 +51,8 @@ impl Lexer{
 
       ';' => self.add_token(TokenKind::Semicolon),
 
+      ',' => self.add_token(TokenKind::Comma),
+
       '=' => self.add_token(TokenKind::Assignment),
 
       '+' => self.add_token(TokenKind::Plus),

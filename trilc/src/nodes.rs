@@ -1,7 +1,11 @@
 #[derive(Debug)]
+pub struct Call(String, Vec<Expr>);
+
+#[derive(Debug)]
 pub enum Stmt{
-  Block(Vec<Stmt>),
   Assignment(String, Expr),
+  FnDef(String, Vec<String>, Vec<Stmt>),
+  FnCall(Call)
 }
 
 #[derive(Debug)]
@@ -9,7 +13,9 @@ pub enum Expr{
   BinaryExpr(Box<Expr>, BinOp, Box<Expr>),
   UnaryExpr(UnOp, Box<Expr>),
   Number(f32),
-  Var(String)
+  Var(String),
+  String(String),
+  FnCall(Call),
 }
 
 #[derive(Debug)]

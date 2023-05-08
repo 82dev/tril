@@ -2,17 +2,6 @@
 + : One or more
 * : Zero or more
 
-OP := '+' | '-' | '*' | '/'
-UNARY := '-'
+fnDec := 'fn' ID paramList Block
 
-Program := statm*
-
-statm = expr ';'
-
-expr = a_expr
-
-a_expr := a_expr OP a_expr
-	  | UNARY expr
-	  | '(' expr ')'
-	  | NUM
-	  | ID
+paramList := '(' ID (',' ID)* ')'

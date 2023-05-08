@@ -26,8 +26,42 @@ impl Parser{
   fn parse_stmt(&mut self) -> Stmt{
     match self.advance(){
       TokenKind::Let => self.parse_let(),
+      TokenKind::FunctionDec => self.parse_fn(),
       err => panic!("Unexpected token: {:?}", err)
     }
+  }
+
+  fn parse_fn(&mut self) -> Stmt{
+    let name = self.expect_id().unwrap();
+    let params = self.parse_params();
+    self.expect(TokenKind::BraceOpen);
+    let block = self.parse_block();
+
+    Stmt::FnDef(name, params, block)
+  }
+
+  fn parse_params(&mut self) -> Vec<String>{
+    self.expect(TokenKind::ParenOpen);
+    let mut params = vec![];
+
+    while !self.expect(TokenKind::ParenClose){
+      loop {
+        params.push(self.expect_id().unwrap());
+        if !self.expect(TokenKind::Comma){
+          break;
+        }
+      }
+    }
+
+    params
+  }
+
+  fn parse_block(&mut self) -> Vec<Stmt>{
+    let mut stmts = vec![];
+    while !self.expect(TokenKind::BraceClose) {
+      stmts.push(self.parse_stmt());
+    }
+    stmts
   }
 
   fn parse_let(&mut self) -> Stmt{
@@ -90,6 +124,7 @@ impl Parser{
     }
 
     //TODO: '('expr')'
+    //TODO: Function Call
     if let Some(num) = self.expect_num(){
       return Expr::Number(num);
     }
@@ -98,6 +133,9 @@ impl Parser{
       return Expr::Var(v);
     }
 
+    if let Some(s) = self.expect_str(){
+      return Expr::String(s);
+    }
     panic!()
   }
 
@@ -123,6 +161,16 @@ impl Parser{
       TokenKind::Identifier(id) => {
         self.advance();
         Some(id)
+      },
+      _ => None
+    }
+  }
+
+  fn expect_str(&mut self) -> Option<String>{
+    match self.curr(){
+      TokenKind::StringLiteral(s) => {
+        self.advance();
+        Some(s)
       },
       _ => None
     }

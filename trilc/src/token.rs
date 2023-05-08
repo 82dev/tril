@@ -16,6 +16,8 @@ pub enum TokenKind{
 
   Semicolon,
 
+  Comma,
+
   Assignment,
 
   Plus,

@@ -22,6 +22,6 @@ fn main() {
   println!("{}", contents);
 
   let tok = Lexer::new(contents).tokenize();
-  println!("{:?}", tok);
+  println!("{:?}\n\n", tok);
   println!("{:?}", Parser::new(tok).parse());
 }
