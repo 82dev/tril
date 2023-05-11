@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct Call(String, Vec<Expr>);
+pub struct Call(pub String,pub Vec<Expr>);
 
 #[derive(Debug)]
 pub enum Stmt{

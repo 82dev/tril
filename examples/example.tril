@@ -1,1 +1,3 @@
-let x = 1 + 2 + "Aaa" / 0;
+fn main(){
+  let a = main() + main(a, b) + main((1+2), 3);
+}

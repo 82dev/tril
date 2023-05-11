@@ -1,4 +1,6 @@
-use crate::{token::{Token, TokenKind}, nodes::{Stmt, Expr, UnOp, BinOp}};
+use core::panic;
+
+use crate::{token::{Token, TokenKind}, nodes::{Stmt, Expr, UnOp, BinOp, Call}};
 
 pub struct Parser{
   tokens: Vec<Token>,
@@ -47,6 +49,22 @@ impl Parser{
     while !self.expect(TokenKind::ParenClose){
       loop {
         params.push(self.expect_id().unwrap());
+        if !self.expect(TokenKind::Comma){
+          break;
+        }
+      }
+    }
+
+    params
+  }
+ 
+  fn parse_args(&mut self) -> Vec<Expr>{
+    self.expect(TokenKind::ParenOpen);
+    let mut params = vec![];
+
+    while !self.expect(TokenKind::ParenClose){
+      loop {
+        params.push(self.parse_expr());
         if !self.expect(TokenKind::Comma){
           break;
         }
@@ -125,18 +143,25 @@ impl Parser{
 
     //TODO: '('expr')'
     //TODO: Function Call
-    if let Some(num) = self.expect_num(){
-      return Expr::Number(num);
+    match self.curr(){
+      TokenKind::Identifier(_) => {
+        let n = self.expect_id().unwrap();
+        if self.curr() == TokenKind::ParenOpen{
+          let a = self.parse_args();
+          return Expr::FnCall(Call(n, a));
+        }
+        Expr::Var(n)
+      },
+      TokenKind::Number(_) => {Expr::Number(self.expect_num().unwrap())},
+      TokenKind::StringLiteral(_) => {Expr::String(self.expect_str().unwrap())},
+      TokenKind::ParenOpen => {
+        self.advance();
+        let e = self.parse_expr();
+        self.expect(TokenKind::ParenClose);
+        e
+      }
+      _ => {panic!()}
     }
-
-    if let Some(v) = self.expect_id(){
-      return Expr::Var(v);
-    }
-
-    if let Some(s) = self.expect_str(){
-      return Expr::String(s);
-    }
-    panic!()
   }
 
   fn expect(&mut self, kind: TokenKind) -> bool{

@@ -2,6 +2,7 @@ mod token;
 mod lexer;
 mod parser;
 mod nodes;
+mod semantic;
 
 use std::{env, fs};
 
