@@ -106,6 +106,8 @@ impl Lexer{
     let kind: TokenKind = match s.as_str(){
       "let" => TokenKind::Let,
       "fn" => TokenKind::FunctionDec,
+
+      "return" => TokenKind::Return,
       
       _ => TokenKind::Identifier(s)
     }; 

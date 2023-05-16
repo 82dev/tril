@@ -29,8 +29,15 @@ impl Parser{
     match self.advance(){
       TokenKind::Let => self.parse_let(),
       TokenKind::FunctionDec => self.parse_fn(),
+      TokenKind::Return => self.parse_return(),
       err => panic!("Unexpected token: {:?}", err)
     }
+  }
+
+  fn parse_return(&mut self) -> Stmt{
+    let e = self.parse_expr();
+    self.expect(TokenKind::Semicolon);
+    Stmt::Return(e)
   }
 
   fn parse_fn(&mut self) -> Stmt{

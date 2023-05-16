@@ -28,6 +28,8 @@ pub enum TokenKind{
   Let,
   FunctionDec,
 
+  Return,
+
   // EOF,
 }
 
