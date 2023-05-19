@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::{token::{Token, TokenKind}, nodes::{Stmt, Expr, UnOp, BinOp, Call}};
+use crate::{token::{Token, TokenKind}, nodes::{Stmt, Expr, UnOp, BinOp, Call, Var}, types::Type};
 
 pub struct Parser{
   tokens: Vec<Token>,
@@ -43,20 +43,29 @@ impl Parser{
   fn parse_fn(&mut self) -> Stmt{
     let name = self.expect_id().unwrap();
     let params = self.parse_params();
+    let mut t = Type::Void;
+
+    if self.match_curr(TokenKind::MapsTo){
+      t = self.expect_type().unwrap();
+    }
+
     self.expect(TokenKind::BraceOpen);
     let block = self.parse_block();
 
-    Stmt::FnDef(name, params, block)
+    Stmt::FnDef(name, params, block, t)
   }
 
-  fn parse_params(&mut self) -> Vec<String>{
+  fn parse_params(&mut self) -> Vec<Var>{
     self.expect(TokenKind::ParenOpen);
     let mut params = vec![];
 
-    while !self.expect(TokenKind::ParenClose){
+    while !self.match_curr(TokenKind::ParenClose){
       loop {
-        params.push(self.expect_id().unwrap());
-        if !self.expect(TokenKind::Comma){
+        let name = self.expect_id().unwrap();
+        self.expect(TokenKind::Colon);
+        let t = self.expect_type().unwrap();
+        params.push(Var(name, t));
+        if !self.match_curr(TokenKind::Comma){
           break;
         }
       }
@@ -69,10 +78,10 @@ impl Parser{
     self.expect(TokenKind::ParenOpen);
     let mut params = vec![];
 
-    while !self.expect(TokenKind::ParenClose){
+    while !self.match_curr(TokenKind::ParenClose){
       loop {
         params.push(self.parse_expr());
-        if !self.expect(TokenKind::Comma){
+        if !self.match_curr(TokenKind::Comma){
           break;
         }
       }
@@ -83,7 +92,7 @@ impl Parser{
 
   fn parse_block(&mut self) -> Vec<Stmt>{
     let mut stmts = vec![];
-    while !self.expect(TokenKind::BraceClose) {
+    while !self.match_curr(TokenKind::BraceClose) {
       stmts.push(self.parse_stmt());
     }
     stmts
@@ -91,11 +100,16 @@ impl Parser{
 
   fn parse_let(&mut self) -> Stmt{
     let name = self.expect_id().unwrap();
+    let mut t = Type::Untyped;
+    //TODO:
+    if self.match_curr(TokenKind::Colon){
+      t = self.expect_type().unwrap();
+    }
     self.expect(TokenKind::Assignment);
     let expr = self.parse_expr();
     self.expect(TokenKind::Semicolon);
 
-    Stmt::Assignment(name, expr)
+    Stmt::Assignment(Var(name, t), expr)
   }
 
   fn parse_expr(&mut self) -> Expr{
@@ -105,13 +119,13 @@ impl Parser{
   fn parse_term(&mut self) -> Expr{
     let mut expr = self.parse_factor();
 
-    if self.expect(TokenKind::Plus){
+    if self.match_curr(TokenKind::Plus){
       expr = Expr::BinaryExpr(
         Box::new(expr),
         BinOp::Plus,
         Box::new(self.parse_term()));
     }
-    if self.expect(TokenKind::Minus){
+    if self.match_curr(TokenKind::Minus){
       expr = Expr::BinaryExpr(
         Box::new(expr),
         BinOp::Minus,
@@ -124,13 +138,13 @@ impl Parser{
   fn parse_factor(&mut self) -> Expr{
     let mut expr = self.parse_unary();
 
-    if self.expect(TokenKind::Asterisk){
+    if self.match_curr(TokenKind::Asterisk){
       expr = Expr::BinaryExpr(
         Box::new(expr),
         BinOp::Asterisk,
         Box::new(self.parse_unary()));
     }
-    if self.expect(TokenKind::FSlash){
+    if self.match_curr(TokenKind::FSlash){
       expr = Expr::BinaryExpr(
         Box::new(expr),
         BinOp::FSlash,
@@ -141,7 +155,7 @@ impl Parser{
   }
 
   fn parse_unary(&mut self) -> Expr{
-    if self.expect(TokenKind::Minus){
+    if self.match_curr(TokenKind::Minus){
       return Expr::UnaryExpr(
         UnOp::Minus,
         Box::new(self.parse_expr())
@@ -157,7 +171,7 @@ impl Parser{
           let a = self.parse_args();
           return Expr::FnCall(Call(n, a));
         }
-        Expr::Var(n)
+        Expr::Var(Var(n, Type::Untyped))
       },
       TokenKind::Number(_) => {Expr::Number(self.expect_num().unwrap())},
       TokenKind::StringLiteral(_) => {Expr::String(self.expect_str().unwrap())},
@@ -171,10 +185,28 @@ impl Parser{
     }
   }
 
-  fn expect(&mut self, kind: TokenKind) -> bool{
+  fn expect(&mut self, kind: TokenKind){
+    println!("{:?} {:?}", self.current, kind);
+    if !self.match_curr(kind){
+      panic!()
+    }
+  }
+
+  //cant use match
+  fn match_curr(&mut self, kind: TokenKind) -> bool{
     match self.curr(){
       tk if tk == kind => {self.advance(); true},
       _ => false 
+    }
+  }
+
+  fn expect_type(&mut self) -> Option<Type>{
+    match self.curr(){
+      TokenKind::Type(t) => {
+        self.advance();
+        Some(t)
+      },
+      _ => None
     }
   }
   

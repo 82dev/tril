@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenKind};
+use crate::{token::{Token, TokenKind}, types::Type};
 
 pub struct Lexer{
   source: Vec<char>,
@@ -49,6 +49,7 @@ impl Lexer{
       '{' => self.add_token(TokenKind::BraceOpen),
       '}' => self.add_token(TokenKind::BraceClose),
 
+      ':' => self.add_token(TokenKind::Colon),
       ';' => self.add_token(TokenKind::Semicolon),
 
       ',' => self.add_token(TokenKind::Comma),
@@ -56,7 +57,14 @@ impl Lexer{
       '=' => self.add_token(TokenKind::Assignment),
 
       '+' => self.add_token(TokenKind::Plus),
-      '-' => self.add_token(TokenKind::Minus),
+      '-' => {
+        if self.source[self.pos] == '>' {
+          self.add_token(TokenKind::MapsTo);
+        }
+        else{
+          self.add_token(TokenKind::Minus)
+        }
+      },
       '*' => self.add_token(TokenKind::Asterisk),
       '/' => {
         if self.source[self.pos] == '/' {
@@ -97,7 +105,7 @@ impl Lexer{
   }
 
   fn identifier(&mut self){
-    while !self.is_at_end() && self.source[self.pos].is_ascii_alphanumeric(){
+    while !self.is_at_end() && (self.source[self.pos].is_ascii_alphanumeric() || self.source[self.pos] == '_'){
       self.advance();
     }
 
@@ -106,6 +114,9 @@ impl Lexer{
     let kind: TokenKind = match s.as_str(){
       "let" => TokenKind::Let,
       "fn" => TokenKind::FunctionDec,
+
+      "F32" => TokenKind::Type(Type::F32),
+      "String" => TokenKind::Type(Type::String),
 
       "return" => TokenKind::Return,
       

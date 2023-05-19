@@ -26,20 +26,24 @@ impl<'ctx> CodeGenerator<'ctx>{
 	}
 
 	pub fn generate(mut self, path: &PathBuf){
+		let fprintf_t = self.f32_type.fn_type(&vec![self.f32_type.into()], false);
+		let fprintf = self.module.add_function("print_ascii", fprintf_t, None);
+
 		for stmt in self.nodes.clone().iter(){
 			self.gen_stmt(&stmt);
 		}
 		
 		println!("{}", path.display());
-		self.module.print_to_file(path).unwrap();
+		self.module.print_to_file(path);
 	}
 
 	fn gen_stmt(&mut self, stmt: &Stmt){
 		match stmt{
-			Stmt::Assignment(name, expr) => self.gen_ass(name.clone(), expr.clone()),
-			Stmt::FnDef(name, params, stmts) => self.gen_fn(name.to_string(), params.clone(), stmts.clone()),
-			Stmt::FnCall(call) => {self.gen_call(call.0.clone(), call.1.clone());},
-			Stmt::Return(expr) => {self.gen_ret(expr.clone())}
+			Stmt::Assignment(var, expr) => self.gen_ass(var.0.clone(), expr.clone()),
+			// Stmt::FnDef(name, params, stmts) => self.gen_fn(name.to_string(), params.clone(), stmts.clone()),
+			// Stmt::FnCall(call) => {self.gen_call(call.0.clone(), call.1.clone());},
+			Stmt::Return(expr) => {self.gen_ret(expr.clone())},
+			_ => ()
 		}
 	}
 
@@ -141,12 +145,12 @@ impl<'ctx> CodeGenerator<'ctx>{
 					}
 				}
 			},
-			Expr::Var(name) => {
+			Expr::Var(var) => {
 				//TODO: idk tf i'm doing
 				// self.module.get_global(name.as_str()).unwrap().get_initializer().unwrap().into_float_value()
-				match self.variables.get(&name){
-					Some(n) => self.builder.build_load(self.f32_type, n.clone(), name.as_str()).into_float_value(),
-					None => panic!("Could not find variable '{}'", name),
+				match self.variables.get(&var.0){
+					Some(n) => self.builder.build_load(self.f32_type, n.clone(), var.0.as_str()).into_float_value(),
+					None => panic!("Could not find variable '{}'", var.0),
 				}
 			},
 			Expr::FnCall(call) => {

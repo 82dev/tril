@@ -1,7 +1,0 @@
-? : One or zero
-+ : One or more
-* : Zero or more
-
-fnDec := 'fn' ID paramList Block
-
-paramList := '(' ID (',' ID)* ')'

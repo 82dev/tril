@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::types::Type;
+
 #[derive(Debug)]
 #[derive(PartialEq)]
 #[derive(Clone)]
@@ -7,6 +9,8 @@ pub enum TokenKind{
   Identifier(String),
   Number(f32),
   StringLiteral(String),
+
+  Type(Type),
   
   ParenOpen,
   ParenClose,
@@ -14,6 +18,7 @@ pub enum TokenKind{
   BraceOpen,
   BraceClose,
 
+  Colon,
   Semicolon,
 
   Comma,
@@ -27,6 +32,7 @@ pub enum TokenKind{
 
   Let,
   FunctionDec,
+  MapsTo,
 
   Return,
 

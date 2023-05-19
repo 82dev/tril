@@ -1,8 +1,8 @@
-fn foo(a){
-  return a + 2;
+fn main(a: F32) -> F32{
+  let a = printf_ascii();
+  return 0;
 }
 
-fn main(a){
-  let b = foo(a);
-  return b;
+fn foo(a: String) -> F32{
+  return 32;
 }
