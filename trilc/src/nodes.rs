@@ -1,48 +1,73 @@
-use crate::types::{FuncType, Type};
+use crate::types::{StructType, FunctionType, Type};
 
 #[derive(Debug)]
 #[derive(Clone)]
-pub struct Call(pub String,pub Vec<Expr>);
-#[derive(Debug)]
-#[derive(Clone)]
-pub struct Var(pub String, pub Type);
-
-#[derive(Debug)]
-#[derive(Clone)]
-pub enum Stmt{
-  Assignment(Var, Expr),
-  FnDef(String, Vec<Var>, Vec<Stmt>, Type),
-  Return(Expr)
+pub enum TopLevel{
+  FnDecl(String, FunctionType, Vec<String>, Vec<Statement>),
+  Extern(String, FunctionType),
+  StructDecl(StructType)
 }
 
 #[derive(Debug)]
-#[derive(Clone,)]
-pub enum Expr{
-  BinaryExpr(Box<Expr>, BinOp, Box<Expr>),
-  UnaryExpr(UnOp, Box<Expr>),
-  Number(f32),
-  Var(Var),
+#[derive(Clone)]
+pub enum Statement{
+  Assignment(String, Type, Expression),
+  FnCall(FunctionCall),
+  Return(Expression),
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub enum Expression{
+  BinExpr(BinOp, Box<Expression>, Box<Expression>, Type),
+  UnaryExpr(UnOp, Box<Expression>, Type),
+  Literal(Literal),
+  FnCall(FunctionCall),
+  Variable(String, Type),
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub enum Literal{
+  Int(i32),
+  Float(f32),
   String(String),
-  FnCall(Call),
+  Bool(bool),
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct FunctionCall{
+  pub name: String,
+  pub args: Vec<Expression>,
+}
+
+impl FunctionCall{
+  pub fn new(name: String, args: Vec<Expression>) -> Self{
+    FunctionCall{
+      name,
+      args,
+    }
+  }
 }
 
 #[derive(Debug)]
 #[derive(Clone, Copy)]
 pub enum BinOp{
-  Plus,
-  Minus,
-  Asterisk,
-  FSlash,
+  Add,
+  Sub,
+  Mul,
+  Div,
 }
 
 #[derive(Debug)]
 #[derive(Clone, Copy)]
 pub enum UnOp{
-  Minus,
+  ArithmeticNeg,
 }
 
-impl From<Box<Expr>> for Expr{
-  fn from(value: Box<Expr>) -> Self {
+impl From<Box<Expression>> for Expression{
+  fn from(value: Box<Expression>) -> Self {
     *value
   }
 }

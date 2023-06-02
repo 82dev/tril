@@ -1,162 +1,351 @@
-use std::{path::PathBuf, collections::HashMap};
+use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches};
 
-use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue}, types::{FloatType, PointerType}};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace};
 
-use crate::nodes::{Stmt, Expr, UnOp, BinOp};
+use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType}};
 
 pub struct CodeGenerator<'ctx>{
 	pub context: &'ctx Context,
 	pub module: Module<'ctx>,
 	pub builder: Builder<'ctx>,
-	pub nodes: Vec<Stmt>,
+	pub nodes: Vec<TopLevel>,
 	variables: HashMap<String, PointerValue<'ctx>>,
-	f32_type: FloatType<'ctx>,
 }
 
 impl<'ctx> CodeGenerator<'ctx>{
-	pub fn new(context: &'ctx Context, module: Module<'ctx>, builder: Builder<'ctx>, nodes: Vec<Stmt>) -> CodeGenerator<'ctx>{
+	pub fn new(context: &'ctx Context, module: Module<'ctx>, builder: Builder<'ctx>, nodes: Vec<TopLevel>) -> CodeGenerator<'ctx>{
 		CodeGenerator{
 			context,
 			module,
 			builder,
 			nodes,
 			variables: HashMap::new(),
-			f32_type: context.f32_type(),
 		}
 	}
 
-	pub fn generate(mut self, path: &PathBuf){
-		let fprintf_t = self.f32_type.fn_type(&vec![self.f32_type.into()], false);
-		let fprintf = self.module.add_function("print_ascii", fprintf_t, None);
-
-		for stmt in self.nodes.clone().iter(){
-			self.gen_stmt(&stmt);
-		}
-		
+	pub fn generate(mut self, path: &PathBuf) -> Vec<TopLevel>{
 		println!("{}", path.display());
-		self.module.print_to_file(path);
+		for top in self.nodes.to_owned(){
+			self.gen_top(top);
+		}
+		self.module.print_to_file(path).unwrap();
+
+		self.nodes
 	}
 
-	fn gen_stmt(&mut self, stmt: &Stmt){
-		match stmt{
-			Stmt::Assignment(var, expr) => self.gen_ass(var.0.clone(), expr.clone()),
-			// Stmt::FnDef(name, params, stmts) => self.gen_fn(name.to_string(), params.clone(), stmts.clone()),
-			// Stmt::FnCall(call) => {self.gen_call(call.0.clone(), call.1.clone());},
-			Stmt::Return(expr) => {self.gen_ret(expr.clone())},
-			_ => ()
+	fn gen_top(&mut self, top: TopLevel){
+		match top{
+			TopLevel::FnDecl(name, ftype, params, body) => self.gen_fn_decl(name, ftype, params, body),
+			TopLevel::Extern(name, ftype) => self.gen_extern(name, ftype),
+			TopLevel::StructDecl(_) => todo!(),
 		}
 	}
 
-	fn gen_ret(&mut self, expr: Expr){
-		let e = self.gen_expr(expr.clone());
-		self.builder
-			.build_return(
-				Some(&e)
-			);
+	fn gen_statement(&mut self, stmt: Statement){
+		match stmt{
+			Statement::Assignment(name, ty, expr) => self.gen_ass(name, ty, expr),
+			Statement::FnCall(fcall) => {self.gen_call(fcall);},
+			Statement::Return(expr) => self.gen_return(expr),
+		}
 	}
 
-	fn gen_fn(
+	fn gen_return(&mut self, expr: Expression){
+		let e = self.gen_expression(expr);
+		self.builder
+			.build_return(Some(&e));
+	}
+
+	fn gen_ass(
 		&mut self,
 		name: String,
+		ty: Type,
+		expr: Expression,
+	){
+		let mut ty = ty;
+		
+		if matches!(ty, Type::Unknown){
+			ty = self.get_expr_type(expr.clone());
+		}
+		
+		let ptr = self.builder.build_alloca(self.get_type(ty), name.as_str());
+		let e = self.gen_expression(expr);
+		self.builder.build_store(ptr, e);
+		self.variables.insert(name, ptr);
+	}
+
+	fn gen_fn_decl(
+		&mut self,
+		name: String,
+		ftype: FunctionType,
 		params: Vec<String>,
-		stmts: Vec<Stmt>)
-	{	
-		let fn_type = self.f32_type.fn_type(
-			&vec![self.f32_type.into(); params.len()],
-			false
-		);
-		
-		let func = self.module.add_function(name.as_str(), fn_type, None);
-		
-		//https://github.com/Narukara/Kaleidoscope-Rust/blob/main/src/parser/mod.rs
-		//ty <3
-		let args: Vec<FloatValue> = func
-			.get_param_iter()
-			.map(|p| p.into_float_value())
-			.collect();
+		body: Vec<Statement>)
+	{
+		let ft = self.get_fn_type(ftype);
+		let func = self.module.add_function(name.as_str(), ft, None);
 
 		let bb = self.context.append_basic_block(func, "entry");
 		self.builder.position_at_end(bb);
 
 		self.variables.clear();
-		for (i, p) in args.iter().enumerate(){
-			p.set_name(params[i].as_str());
+		for (i, p) in func.get_params().iter().enumerate(){
+			let pname = params[i].as_str();
+			p.set_name(&pname);
 
-			let ptr = self.builder.build_alloca(self.f32_type, params[i].as_str());
-			self.builder.build_store(ptr, args[i]);
-			self.variables.insert(params[i].clone(), ptr);
+			let ptr = self.builder.build_alloca(p.get_type(), &pname);
+			self.builder.build_store(ptr, p.into_float_value());
+			self.variables.insert(pname.to_string(), p.into_pointer_value());
 		}
 
-		for stmt in stmts{
-			self.gen_stmt(&stmt);
+		for stmt in body{
+			self.gen_statement(stmt);
 		}
 	}
 
-	fn gen_call(&mut self, name: String, args: Vec<Expr>) -> FloatValue<'ctx>{
-		let func = self.module
-			.get_function(name.as_str())
-			.unwrap();
+	fn gen_call(&mut self, fcall: FunctionCall) -> BasicValueEnum<'ctx>{
+		let func = self.module.get_function(&fcall.name).unwrap();
+		assert_eq!(func.count_params() as usize, fcall.args.len());
 
-		if func.count_params() as usize != args.len(){
-			panic!("Number of parameters does not match function! {}", name);
-		}
-
-		let args: Vec<BasicMetadataValueEnum> = args
-			.iter()
-			.map(|a| self.gen_expr(a.clone()).into())
-			.collect();
-
+		let args: Vec<BasicMetadataValueEnum> = fcall.args.iter()
+			.map(|a| self.gen_expression(a.clone()).into()).collect();
+		
 		self.builder
-			.build_call(func, &args, name.as_str())
+			.build_call(func, &args, &fcall.name)
 			.try_as_basic_value()
 			.left()
 			.unwrap()
-			.into_float_value()
+	}
+	
+	fn gen_extern(
+		&mut self,
+		name: String, 
+		ftype: FunctionType,
+	)
+	{
+		let ft = self.get_fn_type(ftype);
+		let func = self.module.add_function(name.as_str(), ft, None);
 	}
 
-	fn gen_ass(&mut self, name: String, expr: Expr){
-		let v = self.builder.build_alloca(self.f32_type, name.as_str());
-		let e = self.gen_expr(expr);
-		self.builder
-			.build_store(v, e);
-
-		self.variables.insert(name, v);
-	}
-
-	fn gen_expr(&mut self, expr: Expr) -> FloatValue<'ctx>{
+	fn gen_expression(&mut self, expr: Expression) -> BasicValueEnum<'ctx>{
 		match expr{
-			Expr::Number(val) => {self.f32_type.const_float(val.into())},
-			Expr::BinaryExpr(lhs, bop, rhs) => {
-				let l = self.gen_expr(lhs.into());
-				let r = self.gen_expr(rhs.into());
-
-				match bop{
-					BinOp::Plus => {self.builder.build_float_add(l, r, "addtmp")},
-					BinOp::Minus => {self.builder.build_float_sub(l, r, "subtmp")},
-					BinOp::Asterisk => {self.builder.build_float_mul(l, r, "multmp")},
-					BinOp::FSlash => {self.builder.build_float_div(l, r, "divtmp")},
-				}
-			},
-			Expr::UnaryExpr(uop, rhs) => {
-				match uop{
-					UnOp::Minus => {
-						let r = self.gen_expr(rhs.into());
-						self.builder.build_float_neg(r, "negtmp")
+			Expression::Literal(lit) => {
+				match lit{
+					Literal::Int(i) => self.context.i32_type().const_int(i as u64, false).as_basic_value_enum(),
+					Literal::Float(f) => self.context.f32_type().const_float(f as f64).as_basic_value_enum(),
+					Literal::Bool(b) => self.context.bool_type().const_int(if b {1} else {0}, false).as_basic_value_enum(),
+					Literal::String(s) => {
+						self.builder.build_global_string_ptr(s.as_str(), "str").as_pointer_value().as_basic_value_enum()
 					}
 				}
 			},
-			Expr::Var(var) => {
-				//TODO: idk tf i'm doing
-				// self.module.get_global(name.as_str()).unwrap().get_initializer().unwrap().into_float_value()
-				match self.variables.get(&var.0){
-					Some(n) => self.builder.build_load(self.f32_type, n.clone(), var.0.as_str()).into_float_value(),
-					None => panic!("Could not find variable '{}'", var.0),
-				}
+
+			Expression::Variable(name, ty) => {
+				self.builder.build_load(self.get_type(ty), *self.variables.get(&name).unwrap(), &name)
 			},
-			Expr::FnCall(call) => {
-				self.gen_call(call.0, call.1)
+
+			Expression::FnCall(fcall) => {
+				self.gen_call(fcall)
+			},
+
+			Expression::UnaryExpr(unop, e, ty) => {
+				if let Type::Primitive(ty) = ty{
+					let rhs = self.gen_expression(e.into());
+					match unop{
+						UnOp::ArithmeticNeg => {
+							match ty{
+								PrimitiveType::Int => {
+									self.builder.build_int_neg(rhs.into_int_value(), "ineg").as_basic_value_enum()
+								},
+								PrimitiveType::Float => {
+									self.builder.build_float_neg(rhs.into_float_value(), "fneg").as_basic_value_enum()
+								},
+
+								_ => panic!()
+							}
+						}
+					}
+				}
+				else{
+					unreachable!()
+				}
 			}
-			_ => panic!(),
+
+			//To whoever is reading this, I'm sorry
+			Expression::BinExpr(
+				bop,
+				lhs,
+				rhs,
+				ty,
+			) => {
+				if let Type::Primitive(ty) = ty{
+					let lhs = self.gen_expression(lhs.into());
+					let rhs = self.gen_expression(rhs.into());
+					
+					match bop{
+						BinOp::Add => {
+							match ty {
+								PrimitiveType::Int => {
+									self.builder
+										.build_int_add(
+											lhs.into_int_value(),
+											rhs.into_int_value(),
+											"iadd"
+										).as_basic_value_enum()
+								},
+
+								PrimitiveType::Float => {
+									self.builder
+										.build_float_add(
+											lhs.into_float_value(),
+											rhs.into_float_value(),
+											"fadd"
+										).as_basic_value_enum()
+								},
+
+								PrimitiveType::String | PrimitiveType::Bool => todo!(),
+							}
+						},
+						BinOp::Sub => {
+							match ty {
+								PrimitiveType::Int => {
+									self.builder
+										.build_int_sub(
+											lhs.into_int_value(),
+											rhs.into_int_value(),
+											"isub"
+										).as_basic_value_enum()
+								},
+
+								PrimitiveType::Float => {
+									self.builder
+										.build_float_sub(
+											lhs.into_float_value(),
+											rhs.into_float_value(),
+											"fsub"
+										).as_basic_value_enum()
+								},
+
+								_ => panic!()
+						}
+					},
+					
+					BinOp::Mul => {
+						match ty {
+							PrimitiveType::Int => {
+								self.builder
+									.build_int_mul(
+										lhs.into_int_value(),
+										rhs.into_int_value(),
+										"imul"
+									).as_basic_value_enum()
+							},
+
+							PrimitiveType::Float => {
+								self.builder
+									.build_float_add(
+										lhs.into_float_value(),
+										rhs.into_float_value(),
+										"fmul"
+									).as_basic_value_enum()
+							},
+
+							_ => panic!()
+						}
+					},
+
+					BinOp::Div => {
+						match ty {
+							PrimitiveType::Int => {
+								self.builder
+									.build_int_exact_signed_div(
+										lhs.into_int_value(),
+										rhs.into_int_value(),
+										"idiv"
+									).as_basic_value_enum()
+							},
+
+							PrimitiveType::Float => {
+								self.builder
+									.build_float_div(
+										lhs.into_float_value(),
+										rhs.into_float_value(),
+										"fdiv"
+									).as_basic_value_enum()
+							},
+
+							_ => panic!()
+						}
+					},
+					}
+				}
+				else{
+					unreachable!()
+				}
+			}
+		}
+	}
+
+	fn get_type(&self, t: Type) -> BasicTypeEnum<'ctx>{
+		match t{
+			Type::Primitive(p) => self.get_type_from_primitive(p),
+			Type::Func(ft) => {
+				self.get_fn_type(ft).ptr_type(AddressSpace::default()).into()
+			}
+			Type::Struct(_) => todo!(),
+			Type::Unknown => unreachable!(),
+		}
+	}
+
+	fn get_expr_type(&self, e: Expression) -> Type{
+		match e{
+			Expression::Variable(_, t) => t,
+			Expression::Literal(lit) => match lit{
+				Literal::Int(_) => Type::Primitive(PrimitiveType::Int),
+				Literal::Float(_) => Type::Primitive(PrimitiveType::Float),
+				Literal::String(_) => Type::Primitive(PrimitiveType::String),
+				Literal::Bool(_) => Type::Primitive(PrimitiveType::Bool),
+			},
+			Expression::FnCall(fcall) => {
+				self.module.get_function(&fcall.name).unwrap().get_type();
+				todo!()
+			},
+			Expression::UnaryExpr(_, ex, mut ty) => {
+				ty = self.get_expr_type(ex.into());
+				ty
+			},
+			Expression::BinExpr(_, lhs, rhs, mut ty) => {
+				let lt = self.get_expr_type(lhs.into());
+				assert_eq!(lt, self.get_expr_type(rhs.into()));
+				ty = lt;
+				ty
+			}
+		}
+	}
+
+	fn get_fn_type(&self, ft: FunctionType) -> inkwell::types::FunctionType<'ctx>{
+		let params: &Vec<BasicMetadataTypeEnum> =
+			&ft.params.iter().map(
+				|p| {
+					self.get_type(*p.clone()).into()
+				}
+			).collect();
+		
+		if let Some(ret) = ft.ret{
+			self.get_type(ret.into()).fn_type(params, false)
+		}
+		else{
+			self.context.void_type().fn_type(params, false)
+		}
+	}
+
+	fn get_type_from_primitive(&self, t: PrimitiveType) -> BasicTypeEnum<'ctx>{
+		match t{
+			PrimitiveType::Float => self.context.f32_type().into(),
+			PrimitiveType::String => self.context
+				.i8_type()
+				.ptr_type(AddressSpace::default())
+				.into(),
+			PrimitiveType::Int => self.context.i32_type().into(),
+			PrimitiveType::Bool => self.context.bool_type().into(),
 		}
 	}
 }

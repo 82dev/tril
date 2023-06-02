@@ -1,19 +1,18 @@
 ; ModuleID = 'example'
 source_filename = "example"
 
-declare float @print_ascii(float)
+@str = private unnamed_addr constant [5 x i8] c"aaaa\00", align 1
+@str.1 = private unnamed_addr constant [5 x i8] c"aaaa\00", align 1
 
-define float @main(float %a) {
+declare float @puts(ptr)
+
+declare float @printf(ptr)
+
+define float @main() {
 entry:
-  %a1 = alloca float, align 4
-  store float %a, ptr %a1, align 4
-  %a2 = alloca float, align 4
-  store float 6.200000e+01, ptr %a2, align 4
-  %a3 = alloca float, align 4
-  store float 7.800000e+01, ptr %a3, align 4
-  %x = alloca float, align 4
-  %a4 = load float, ptr %a3, align 4
-  %print_ascii = call float @print_ascii(float %a4)
-  store float %print_ascii, ptr %x, align 4
+  %a = alloca float, align 4
+  store float 2.000000e+00, ptr %a, align 4
+  %printf = call float @printf(ptr @str)
+  %printf1 = call float @printf(ptr @str.1)
   ret float 0.000000e+00
 }

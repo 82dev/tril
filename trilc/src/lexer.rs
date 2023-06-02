@@ -1,4 +1,4 @@
-use crate::{token::{Token, TokenKind}, types::Type};
+use crate::{token::{Token, TokenKind}, types::{Type, PrimitiveType}};
 
 pub struct Lexer{
   source: Vec<char>,
@@ -115,8 +115,12 @@ impl Lexer{
       "let" => TokenKind::Let,
       "fn" => TokenKind::FunctionDec,
 
-      "F32" => TokenKind::Type(Type::F32),
-      "String" => TokenKind::Type(Type::String),
+      "F32" => TokenKind::Type(Type::Primitive(PrimitiveType::Float)),
+      "String" => TokenKind::Type(Type::Primitive(PrimitiveType::String)),
+      "Bool" => TokenKind::Type(Type::Primitive(PrimitiveType::Bool)),
+
+      "true" => TokenKind::True,
+      "false" => TokenKind::False,
 
       "return" => TokenKind::Return,
       

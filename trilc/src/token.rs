@@ -36,6 +36,9 @@ pub enum TokenKind{
 
   Return,
 
+  True,
+  False,
+
   // EOF,
 }
 

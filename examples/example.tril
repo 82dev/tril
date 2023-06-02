@@ -1,8 +1,9 @@
-fn main(a: F32) -> F32{
-  let a = printf_ascii();
-  return 0;
-}
+fn puts(input: String) -> F32;
+fn printf(input: String) -> F32;
 
-fn foo(a: String) -> F32{
-  return 32;
+fn main() -> F32{
+  let a = 2;
+  printf("aaaa");
+  printf("aaaa");
+  return 0;
 }
