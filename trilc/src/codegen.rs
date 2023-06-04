@@ -1,6 +1,6 @@
 use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches};
 
-use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
 
 use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType}};
 
@@ -46,13 +46,52 @@ impl<'ctx> CodeGenerator<'ctx>{
 			Statement::Assignment(name, ty, expr) => self.gen_ass(name, ty, expr),
 			Statement::FnCall(fcall) => {self.gen_call(fcall);},
 			Statement::Return(expr) => self.gen_return(expr),
+			Statement::If(expr, ifbody, elsebody) => self.gen_if(expr, ifbody, elsebody),
 		}
 	}
 
-	fn gen_return(&mut self, expr: Expression){
-		let e = self.gen_expression(expr);
-		self.builder
-			.build_return(Some(&e));
+	fn gen_if(&mut self, expr: Expression, ifbody: Vec<Box<Statement>>, elsebody: Option<Vec<Box<Statement>>>){
+		let bb = self.builder.get_insert_block().unwrap();
+		let func = bb.get_parent().unwrap();
+		//This should be a bool so we can safely? into_int_value();
+		let e = self.gen_expression(expr).into_int_value();
+		let cond = self.builder
+			.build_int_compare(IntPredicate::NE, e, self.context.bool_type().const_int(0, false), "ifcond");
+
+		let thenbb = self.context.append_basic_block(func, "then");
+		let elsebb = self.context.append_basic_block(func, "else"); //TODO: Else blocks
+		let mergebb = self.context.append_basic_block(func, "merge");
+
+		self.builder.build_conditional_branch(cond, thenbb, elsebb);
+
+		self.builder.position_at_end(thenbb);
+		for s in ifbody{
+			self.gen_statement(*s);
+		}
+		self.builder.build_unconditional_branch(mergebb);
+
+		
+		self.builder.position_at_end(elsebb);
+		if let Some(body) = elsebody{
+			for s in body{
+				self.gen_statement(*s);
+			}
+		}
+		self.builder.build_unconditional_branch(mergebb);
+
+		self.builder.position_at_end(mergebb);
+	}
+
+	fn gen_return(&mut self, expr: Option<Expression>){
+		if let Some(expr) = expr{
+			let e = self.gen_expression(expr);
+			self.builder
+				.build_return(Some(&e));
+		}
+		else{
+			self.builder
+				.build_return(None);
+		}
 	}
 
 	fn gen_ass(
@@ -92,7 +131,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 			p.set_name(&pname);
 
 			let ptr = self.builder.build_alloca(p.get_type(), &pname);
-			self.builder.build_store(ptr, p.into_float_value());
+			self.builder.build_store(ptr, *p);
 			self.variables.insert(pname.to_string(), p.into_pointer_value());
 		}
 
@@ -139,6 +178,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 			},
 
 			Expression::Variable(name, ty) => {
+				println!("{:?}", ty);
 				self.builder.build_load(self.get_type(ty), *self.variables.get(&name).unwrap(), &name)
 			},
 
@@ -176,110 +216,49 @@ impl<'ctx> CodeGenerator<'ctx>{
 				rhs,
 				ty,
 			) => {
-				if let Type::Primitive(ty) = ty{
-					let lhs = self.gen_expression(lhs.into());
-					let rhs = self.gen_expression(rhs.into());
-					
-					match bop{
-						BinOp::Add => {
-							match ty {
-								PrimitiveType::Int => {
-									self.builder
-										.build_int_add(
-											lhs.into_int_value(),
-											rhs.into_int_value(),
-											"iadd"
-										).as_basic_value_enum()
-								},
+				let r#type = self.get_expr_type(*lhs.clone());
+				let lhs = self.gen_expression(lhs.into());
+				let rhs = self.gen_expression(rhs.into());
 
-								PrimitiveType::Float => {
-									self.builder
-										.build_float_add(
-											lhs.into_float_value(),
-											rhs.into_float_value(),
-											"fadd"
-										).as_basic_value_enum()
-								},
-
-								PrimitiveType::String | PrimitiveType::Bool => todo!(),
+				if let Type::Primitive(r#type) = r#type{
+					match r#type{
+						PrimitiveType::Int => {
+							let lhs = lhs.into_int_value();
+							let rhs = rhs.into_int_value();
+							match bop{
+								BinOp::Add => self.builder.build_int_add(lhs, rhs, "iadd").as_basic_value_enum(),
+								BinOp::Sub => self.builder.build_int_sub(lhs, rhs, "isub").as_basic_value_enum(),
+								BinOp::Mul => self.builder.build_int_mul(lhs, rhs, "imul").as_basic_value_enum(),
+								BinOp::Div => self.builder.build_int_signed_div(lhs, rhs, "isdiv").as_basic_value_enum(),
+								BinOp::Equal => self.builder.build_int_compare(IntPredicate::EQ, lhs, rhs, "ieq").as_basic_value_enum(),
+								BinOp::NEqual => self.builder.build_int_compare(IntPredicate::NE, lhs, rhs, "ine").as_basic_value_enum(),
+								BinOp::Lesser => self.builder.build_int_compare(IntPredicate::SLT, lhs, rhs, "ilt").as_basic_value_enum(),
+								BinOp::LEq => self.builder.build_int_compare(IntPredicate::SLE, lhs, rhs, "ile").as_basic_value_enum(),
+								BinOp::Greater => self.builder.build_int_compare(IntPredicate::SGT, lhs, rhs, "igt").as_basic_value_enum(),
+								BinOp::GEq => self.builder.build_int_compare(IntPredicate::SGE, lhs, rhs, "ige").as_basic_value_enum(),
 							}
 						},
-						BinOp::Sub => {
-							match ty {
-								PrimitiveType::Int => {
-									self.builder
-										.build_int_sub(
-											lhs.into_int_value(),
-											rhs.into_int_value(),
-											"isub"
-										).as_basic_value_enum()
-								},
-
-								PrimitiveType::Float => {
-									self.builder
-										.build_float_sub(
-											lhs.into_float_value(),
-											rhs.into_float_value(),
-											"fsub"
-										).as_basic_value_enum()
-								},
-
-								_ => panic!()
-						}
-					},
-					
-					BinOp::Mul => {
-						match ty {
-							PrimitiveType::Int => {
-								self.builder
-									.build_int_mul(
-										lhs.into_int_value(),
-										rhs.into_int_value(),
-										"imul"
-									).as_basic_value_enum()
-							},
-
-							PrimitiveType::Float => {
-								self.builder
-									.build_float_add(
-										lhs.into_float_value(),
-										rhs.into_float_value(),
-										"fmul"
-									).as_basic_value_enum()
-							},
-
-							_ => panic!()
-						}
-					},
-
-					BinOp::Div => {
-						match ty {
-							PrimitiveType::Int => {
-								self.builder
-									.build_int_exact_signed_div(
-										lhs.into_int_value(),
-										rhs.into_int_value(),
-										"idiv"
-									).as_basic_value_enum()
-							},
-
-							PrimitiveType::Float => {
-								self.builder
-									.build_float_div(
-										lhs.into_float_value(),
-										rhs.into_float_value(),
-										"fdiv"
-									).as_basic_value_enum()
-							},
-
-							_ => panic!()
-						}
-					},
+						PrimitiveType::Float => {
+							let lhs = lhs.into_float_value();
+							let rhs = rhs.into_float_value();
+							match bop{
+								BinOp::Add => self.builder.build_float_add(lhs, rhs, "fadd").as_basic_value_enum(),
+								BinOp::Sub => self.builder.build_float_sub(lhs, rhs, "fsub").as_basic_value_enum(),
+								BinOp::Mul => self.builder.build_float_mul(lhs, rhs, "fmul").as_basic_value_enum(),
+								BinOp::Div => self.builder.build_float_div(lhs, rhs, "fsdiv").as_basic_value_enum(),
+								BinOp::Equal => self.builder.build_float_compare(FloatPredicate::OEQ, lhs, rhs, "feq").as_basic_value_enum(),
+								BinOp::NEqual => self.builder.build_float_compare(FloatPredicate::ONE, lhs, rhs, "fne").as_basic_value_enum(),
+								BinOp::Lesser => self.builder.build_float_compare(FloatPredicate::OLT, lhs, rhs, "flt").as_basic_value_enum(),
+								BinOp::LEq => self.builder.build_float_compare(FloatPredicate::OLE, lhs, rhs, "fle").as_basic_value_enum(),
+								BinOp::Greater => self.builder.build_float_compare(FloatPredicate::OGT, lhs, rhs, "fgt").as_basic_value_enum(),
+								BinOp::GEq => self.builder.build_float_compare(FloatPredicate::OGE, lhs, rhs, "fge").as_basic_value_enum(),
+							}
+						},
+						PrimitiveType::Bool => todo!(),
+						PrimitiveType::String => panic!(),
 					}
 				}
-				else{
-					unreachable!()
-				}
+				else {unreachable!()}
 			}
 		}
 	}
@@ -292,6 +271,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 			}
 			Type::Struct(_) => todo!(),
 			Type::Unknown => unreachable!(),
+			Type::Void => unreachable!(),
 		}
 	}
 

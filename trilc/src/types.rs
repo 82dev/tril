@@ -5,6 +5,7 @@ pub enum Type{
   Primitive(PrimitiveType),
   Func(FunctionType),
   Struct(StructType),
+  Void,
   Unknown,
 }
 

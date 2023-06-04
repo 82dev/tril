@@ -11,9 +11,10 @@ pub enum TopLevel{
 #[derive(Debug)]
 #[derive(Clone)]
 pub enum Statement{
+  If(Expression, Vec<Box<Statement>>, Option<Vec<Box<Statement>>>),
   Assignment(String, Type, Expression),
   FnCall(FunctionCall),
-  Return(Expression),
+  Return(Option<Expression>),
 }
 
 #[derive(Debug)]
@@ -58,6 +59,14 @@ pub enum BinOp{
   Sub,
   Mul,
   Div,
+
+  Equal,
+  NEqual,
+
+  Lesser,
+  LEq,
+  Greater,
+  GEq,
 }
 
 #[derive(Debug)]

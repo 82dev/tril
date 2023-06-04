@@ -1,3 +1,5 @@
+use std::println;
+
 use crate::{token::{Token, TokenKind}, nodes::{UnOp, BinOp, TopLevel, Statement, FunctionCall, Expression, Literal,}, types::{Type, FunctionType, PrimitiveType}};
 
 pub struct Parser{
@@ -26,6 +28,7 @@ impl Parser{
   fn parse_top(&mut self) -> TopLevel{
     match self.advance(){
       TokenKind::FunctionDec => self.parse_fn(),
+      TokenKind::Extern => self.parse_extern(),
       err => panic!("Unexpected token: {:?}", err)
     }
   }
@@ -35,8 +38,24 @@ impl Parser{
       TokenKind::Let => self.parse_let(),
       TokenKind::Return => self.parse_return(),
       TokenKind::Identifier(id) => self.parse_ident(id),
+      TokenKind::If => self.parse_if(),
       err => panic!("Unexpected token: {:?}", err)
     }
+  }
+
+  fn parse_if(&mut self) -> Statement{
+    let e = self.parse_expr();
+    self.expect(TokenKind::BraceOpen);
+    let ifbody = self.parse_box_block();
+
+    let mut elsebody = None;
+
+    if self.match_curr(TokenKind::Else){
+      self.expect(TokenKind::BraceOpen);
+      elsebody = Some(self.parse_box_block());
+    }
+
+    Statement::If(e, ifbody, elsebody)
   }
 
   fn parse_ident(&mut self, id: String) -> Statement{
@@ -49,9 +68,44 @@ impl Parser{
   }
 
   fn parse_return(&mut self) -> Statement{
+    if self.match_curr(TokenKind::Semicolon){
+      return Statement::Return(None);
+    }
+    
     let e = self.parse_expr();
     self.expect(TokenKind::Semicolon);
-    Statement::Return(e)
+    Statement::Return(Some(e))
+  }
+
+  fn parse_extern(&mut self) -> TopLevel{
+    let name = self.expect_id().unwrap();
+    let mut params = vec![];
+
+    self.expect(TokenKind::ParenOpen);
+
+    while !self.match_curr(TokenKind::ParenClose){
+      loop{
+        let t = self.expect_type().unwrap();
+        params.push(Box::new(t));
+
+        if !self.match_curr(TokenKind::Comma){
+          break;
+        }
+      } 
+    }
+
+    let mut ret = None;
+
+    if self.match_curr(TokenKind::MapsTo){
+      ret = Some(Box::new(self.expect_type().unwrap()));
+    }
+
+    self.expect(TokenKind::Semicolon);
+
+    TopLevel::Extern(
+      name,
+      FunctionType::new(ret, params)
+    )
   }
 
   fn parse_fn(&mut self) -> TopLevel{
@@ -61,13 +115,6 @@ impl Parser{
 
     if self.match_curr(TokenKind::MapsTo){
       t = Some(Box::new(self.expect_type().unwrap()));
-    }
-
-    if self.match_curr(TokenKind::Semicolon){
-      return TopLevel::Extern(
-        name,
-        FunctionType::new(t, params.1)
-      );
     }
 
     self.expect(TokenKind::BraceOpen);
@@ -128,6 +175,14 @@ impl Parser{
     stmts
   }
 
+  fn parse_box_block(&mut self) -> Vec<Box<Statement>>{
+    let mut stmts = vec![];
+    while !self.match_curr(TokenKind::BraceClose) {
+      stmts.push(Box::new(self.parse_statement()));
+    }
+    stmts
+  }
+
   fn parse_let(&mut self) -> Statement{
     let name = self.expect_id().unwrap();
     let mut t = Type::Unknown;
@@ -143,7 +198,71 @@ impl Parser{
   }
 
   fn parse_expr(&mut self) -> Expression{
-    self.parse_term()
+    self.parse_equality()
+  }
+
+  fn parse_equality(&mut self) -> Expression{
+    let mut lhs = self.parse_comparision();
+
+    if self.match_curr(TokenKind::EqualTo){
+      lhs = Expression::BinExpr(
+        BinOp::Equal,
+        Box::new(lhs),
+        Box::new(self.parse_equality()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+
+    if self.match_curr(TokenKind::NotEqualTo){
+      lhs = Expression::BinExpr(
+        BinOp::NEqual,
+        Box::new(lhs),
+        Box::new(self.parse_equality()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+
+    return lhs;
+  }
+
+  fn parse_comparision(&mut self) -> Expression{
+    let mut lhs = self.parse_term();
+
+    if self.match_curr(TokenKind::LessThan){
+      lhs = Expression::BinExpr(
+        BinOp::Lesser,
+        Box::new(lhs),
+        Box::new(self.parse_comparision()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+
+    if self.match_curr(TokenKind::LessThanEqualTo){
+      lhs = Expression::BinExpr(
+        BinOp::LEq,
+        Box::new(lhs),
+        Box::new(self.parse_comparision()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+    if self.match_curr(TokenKind::GreaterThan){
+      lhs = Expression::BinExpr(
+        BinOp::Greater,
+        Box::new(lhs),
+        Box::new(self.parse_comparision()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+    if self.match_curr(TokenKind::GreaterThanEqualTo){
+      lhs = Expression::BinExpr(
+        BinOp::GEq,
+        Box::new(lhs),
+        Box::new(self.parse_comparision()),
+        Type::Primitive(PrimitiveType::Bool),
+      );
+    }
+
+    return lhs;
   }
 
   fn parse_term(&mut self) -> Expression{
@@ -208,8 +327,11 @@ impl Parser{
           let a = self.parse_args();
           return Expression::FnCall(FunctionCall::new(n, a));
         }
+        //TODO:FIXME:
         Expression::Variable(n, Type::Unknown)
       },
+      TokenKind::True => {self.advance(); Expression::Literal(Literal::Bool(true))},
+      TokenKind::False => {self.advance(); Expression::Literal(Literal::Bool(false))},
       TokenKind::Number(_) => {Expression::Literal(Literal::Float(self.expect_num().unwrap()))},
       TokenKind::StringLiteral(_) => {Expression::Literal(Literal::String(self.expect_str().unwrap()))},
       TokenKind::ParenOpen => {

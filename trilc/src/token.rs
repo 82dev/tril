@@ -30,6 +30,19 @@ pub enum TokenKind{
   Asterisk,
   FSlash,
 
+  Bang,
+
+  EqualTo,
+  NotEqualTo,
+
+  LessThanEqualTo,
+  LessThan,
+  GreaterThanEqualTo,
+  GreaterThan,
+
+  If,
+  Else,
+
   Let,
   FunctionDec,
   MapsTo,
@@ -38,6 +51,8 @@ pub enum TokenKind{
 
   True,
   False,
+
+  Extern,
 
   // EOF,
 }

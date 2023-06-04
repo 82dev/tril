@@ -54,12 +54,51 @@ impl Lexer{
 
       ',' => self.add_token(TokenKind::Comma),
 
-      '=' => self.add_token(TokenKind::Assignment),
+      '=' => {
+        if self.source[self.pos] == '='{
+          self.add_token(TokenKind::EqualTo);
+          self.advance();
+        }
+        else{
+          self.add_token(TokenKind::Assignment)
+        }
+      },
+
+      '!' => {
+        if self.source[self.pos] == '='{
+          self.add_token(TokenKind::NotEqualTo);
+          self.advance();
+        }
+        else{
+          self.add_token(TokenKind::Bang);
+        }
+      },
+
+      '<' => {
+        if self.source[self.pos] == '='{
+          self.add_token(TokenKind::LessThanEqualTo);
+          self.advance();
+        }
+        else{
+          self.add_token(TokenKind::LessThan);
+        }
+      },
+
+      '>' => {
+        if self.source[self.pos] == '='{
+          self.add_token(TokenKind::GreaterThanEqualTo);
+          self.advance();
+        }
+        else{
+          self.add_token(TokenKind::GreaterThan);
+        }
+      },
 
       '+' => self.add_token(TokenKind::Plus),
       '-' => {
         if self.source[self.pos] == '>' {
           self.add_token(TokenKind::MapsTo);
+          self.advance();
         }
         else{
           self.add_token(TokenKind::Minus)
@@ -115,6 +154,9 @@ impl Lexer{
       "let" => TokenKind::Let,
       "fn" => TokenKind::FunctionDec,
 
+      "if" => TokenKind::If,
+      "else" => TokenKind::Else,
+
       "F32" => TokenKind::Type(Type::Primitive(PrimitiveType::Float)),
       "String" => TokenKind::Type(Type::Primitive(PrimitiveType::String)),
       "Bool" => TokenKind::Type(Type::Primitive(PrimitiveType::Bool)),
@@ -123,6 +165,8 @@ impl Lexer{
       "false" => TokenKind::False,
 
       "return" => TokenKind::Return,
+
+      "extern" => TokenKind::Extern,
       
       _ => TokenKind::Identifier(s)
     }; 

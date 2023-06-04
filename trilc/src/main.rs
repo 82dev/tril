@@ -2,15 +2,16 @@ mod token;
 mod lexer;
 mod parser;
 mod nodes;
-mod semantic;
 mod codegen;
 mod types;
+mod typefiller;
+mod prettyprint;
 
 use std::{env, fs, println, path::PathBuf};
 
 use inkwell::context::Context;
 
-use crate::{lexer::Lexer, parser::Parser, semantic::SemanticAnalyzer};
+use crate::{lexer::Lexer, parser::Parser, typefiller::TypeFiller};
 
 fn main() {
   let args: Vec<String> = env::args().collect();
@@ -31,12 +32,12 @@ fn main() {
 
   let tok = Lexer::new(contents).tokenize();
   println!("{:?}\n\n", tok);
-  let nodes = Parser::new(tok).parse();
-  println!("Parse: \n{:?}\n\n", nodes);
+  let nodes = TypeFiller::new(Parser::new(tok).parse()).fill();
+  println!("Typed: \n{:?}\n\n", nodes);
 
-  let context = Context::create();
-  let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
-  let builder = context.create_builder();  
+  // let context = Context::create();
+  // let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
+  // let builder = context.create_builder();  
 
-  println!("{:?}\n\n", codegen::CodeGenerator::new(&context, module, builder, nodes).generate(&path));
+  // println!("{:?}\n\n", codegen::CodeGenerator::new(&context, module, builder, nodes).generate(&path));
 }

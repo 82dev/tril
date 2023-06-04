@@ -1,9 +1,13 @@
-fn puts(input: String) -> F32;
-fn printf(input: String) -> F32;
+extern puts(String);
+
+fn aaa(s: String) -> F32{
+  puts(s);
+  return 0;
+}
 
 fn main() -> F32{
-  let a = 2;
-  printf("aaaa");
-  printf("aaaa");
+  let a: F32 = 3;
+  let b: F32 = 2;
+  let c = a + b;
   return 0;
 }
