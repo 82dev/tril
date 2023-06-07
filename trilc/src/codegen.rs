@@ -1,6 +1,7 @@
-use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches};
+use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches, rc::Rc, cell::RefCell};
+use either::Either;
 
-use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum, InstructionValue}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
 
 use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType}};
 
@@ -28,6 +29,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 		for top in self.nodes.to_owned(){
 			self.gen_top(top);
 		}
+		self.module.print_to_stderr();
 		self.module.print_to_file(path).unwrap();
 
 		self.nodes
@@ -43,14 +45,42 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 	fn gen_statement(&mut self, stmt: Statement){
 		match stmt{
+			Statement::While(expr, body) => self.gen_while(expr, body),
 			Statement::Assignment(name, ty, expr) => self.gen_ass(name, ty, expr),
+			Statement::Mutate(name, expr) => self.gen_mut(name, expr),
 			Statement::FnCall(fcall) => {self.gen_call(fcall);},
 			Statement::Return(expr) => self.gen_return(expr),
 			Statement::If(expr, ifbody, elsebody) => self.gen_if(expr, ifbody, elsebody),
 		}
 	}
 
-	fn gen_if(&mut self, expr: Expression, ifbody: Vec<Box<Statement>>, elsebody: Option<Vec<Box<Statement>>>){
+	fn gen_while(&mut self, expr: Expression, body: Vec<Box<Statement>>){
+		let func = self.builder.get_insert_block().unwrap()
+			.get_parent().unwrap();
+	
+		let whilecond = self.context.append_basic_block(func, "whilecond");
+		let whileloop = self.context.append_basic_block(func, "whileloop");
+		let afterwhile = self.context.append_basic_block(func, "afterwhile");
+
+		self.builder.build_unconditional_branch(whilecond);
+
+		self.builder.position_at_end(whilecond);
+		//This should be a bool so we can safely? into_int_value();
+		let e = self.gen_expression(expr).into_int_value();
+		let cond = self.builder
+			.build_int_compare(IntPredicate::NE, e, self.context.bool_type().const_int(0, false), "whilecond");
+		self.builder.build_conditional_branch(cond, whileloop, afterwhile);
+
+		self.builder.position_at_end(whileloop);
+		for s in body{
+			self.gen_statement(*s);
+		}
+		self.builder.build_unconditional_branch(whilecond);
+
+		self.builder.position_at_end(afterwhile);
+	}
+
+	fn gen_if(&mut self, expr: Expression, ifbody: Vec<Box<Statement>>, elsebody: Vec<Box<Statement>>){
 		let bb = self.builder.get_insert_block().unwrap();
 		let func = bb.get_parent().unwrap();
 		//This should be a bool so we can safely? into_int_value();
@@ -72,10 +102,8 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 		
 		self.builder.position_at_end(elsebb);
-		if let Some(body) = elsebody{
-			for s in body{
-				self.gen_statement(*s);
-			}
+		for s in elsebody{
+			self.gen_statement(*s);
 		}
 		self.builder.build_unconditional_branch(mergebb);
 
@@ -94,18 +122,20 @@ impl<'ctx> CodeGenerator<'ctx>{
 		}
 	}
 
+	fn gen_mut(&mut self, name: String, expr: Expression){
+		let ptr = self.variables.get(&name).unwrap().clone();
+		let e = self.gen_expression(expr);
+		self.builder
+			.build_store(ptr, e);
+	}
+
 	fn gen_ass(
 		&mut self,
 		name: String,
-		ty: Type,
+		ty: RefCell<Type>,
 		expr: Expression,
 	){
-		let mut ty = ty;
-		
-		if matches!(ty, Type::Unknown){
-			ty = self.get_expr_type(expr.clone());
-		}
-		
+		let ty = ty.into_inner();
 		let ptr = self.builder.build_alloca(self.get_type(ty), name.as_str());
 		let e = self.gen_expression(expr);
 		self.builder.build_store(ptr, e);
@@ -132,7 +162,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 			let ptr = self.builder.build_alloca(p.get_type(), &pname);
 			self.builder.build_store(ptr, *p);
-			self.variables.insert(pname.to_string(), p.into_pointer_value());
+			self.variables.insert(pname.to_string(), ptr);
 		}
 
 		for stmt in body{
@@ -140,7 +170,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 		}
 	}
 
-	fn gen_call(&mut self, fcall: FunctionCall) -> BasicValueEnum<'ctx>{
+	fn gen_call(&mut self, fcall: FunctionCall) -> Either<BasicValueEnum<'ctx>, InstructionValue<'ctx>>{
 		let func = self.module.get_function(&fcall.name).unwrap();
 		assert_eq!(func.count_params() as usize, fcall.args.len());
 
@@ -150,8 +180,6 @@ impl<'ctx> CodeGenerator<'ctx>{
 		self.builder
 			.build_call(func, &args, &fcall.name)
 			.try_as_basic_value()
-			.left()
-			.unwrap()
 	}
 	
 	fn gen_extern(
@@ -183,10 +211,11 @@ impl<'ctx> CodeGenerator<'ctx>{
 			},
 
 			Expression::FnCall(fcall) => {
-				self.gen_call(fcall)
+				self.gen_call(fcall).left().unwrap()
 			},
 
 			Expression::UnaryExpr(unop, e, ty) => {
+				let ty = ty.into_inner();
 				if let Type::Primitive(ty) = ty{
 					let rhs = self.gen_expression(e.into());
 					match unop{
@@ -288,15 +317,11 @@ impl<'ctx> CodeGenerator<'ctx>{
 				self.module.get_function(&fcall.name).unwrap().get_type();
 				todo!()
 			},
-			Expression::UnaryExpr(_, ex, mut ty) => {
-				ty = self.get_expr_type(ex.into());
-				ty
+			Expression::UnaryExpr(_, ex, ty) => {
+				ty.into_inner()
 			},
 			Expression::BinExpr(_, lhs, rhs, mut ty) => {
-				let lt = self.get_expr_type(lhs.into());
-				assert_eq!(lt, self.get_expr_type(rhs.into()));
-				ty = lt;
-				ty
+				ty.into_inner()
 			}
 		}
 	}

@@ -35,9 +35,9 @@ fn main() {
   let nodes = TypeFiller::new(Parser::new(tok).parse()).fill();
   println!("Typed: \n{:?}\n\n", nodes);
 
-  // let context = Context::create();
-  // let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
-  // let builder = context.create_builder();  
+  let context = Context::create();
+  let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
+  let builder = context.create_builder();  
 
-  // println!("{:?}\n\n", codegen::CodeGenerator::new(&context, module, builder, nodes).generate(&path));
+  println!("{:?}\n\n", codegen::CodeGenerator::new(&context, module, builder, nodes).generate(&path));
 }

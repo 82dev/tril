@@ -1,13 +1,16 @@
 extern puts(String);
+extern printf(String, I32);
 
-fn aaa(s: String) -> F32{
-  puts(s);
-  return 0;
+fn print_num(n: I32){
+  printf("%c ", n);
+  return;
 }
 
-fn main() -> F32{
-  let a: F32 = 3;
-  let b: F32 = 2;
-  let c = a + b;
-  return 0;
+fn main(){
+  let i = 90;
+  while i > 64{
+    print_num(i);
+    i = i - 1;
+  }
+  return;
 }

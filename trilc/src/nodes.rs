@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::types::{StructType, FunctionType, Type};
 
 #[derive(Debug)]
@@ -11,8 +13,10 @@ pub enum TopLevel{
 #[derive(Debug)]
 #[derive(Clone)]
 pub enum Statement{
-  If(Expression, Vec<Box<Statement>>, Option<Vec<Box<Statement>>>),
-  Assignment(String, Type, Expression),
+  While(Expression, Vec<Box<Statement>>),
+  If(Expression, Vec<Box<Statement>>, Vec<Box<Statement>>),
+  Assignment(String, RefCell<Type>, Expression),
+  Mutate(String, Expression),
   FnCall(FunctionCall),
   Return(Option<Expression>),
 }
@@ -20,8 +24,8 @@ pub enum Statement{
 #[derive(Debug)]
 #[derive(Clone)]
 pub enum Expression{
-  BinExpr(BinOp, Box<Expression>, Box<Expression>, Type),
-  UnaryExpr(UnOp, Box<Expression>, Type),
+  BinExpr(BinOp, Box<Expression>, Box<Expression>, RefCell<Type>),
+  UnaryExpr(UnOp, Box<Expression>, RefCell<Type>),
   Literal(Literal),
   FnCall(FunctionCall),
   Variable(String, Type),

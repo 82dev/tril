@@ -1,4 +1,4 @@
-use std::println;
+use std::{println, rc::Rc, cell::RefCell};
 
 use crate::{token::{Token, TokenKind}, nodes::{UnOp, BinOp, TopLevel, Statement, FunctionCall, Expression, Literal,}, types::{Type, FunctionType, PrimitiveType}};
 
@@ -39,8 +39,15 @@ impl Parser{
       TokenKind::Return => self.parse_return(),
       TokenKind::Identifier(id) => self.parse_ident(id),
       TokenKind::If => self.parse_if(),
+      TokenKind::While => self.parse_while(),
       err => panic!("Unexpected token: {:?}", err)
     }
+  }
+
+  fn parse_while(&mut self) -> Statement{
+    let e = self.parse_expr();
+    self.expect(TokenKind::BraceOpen);
+    Statement::While(e, self.parse_box_block())
   }
 
   fn parse_if(&mut self) -> Statement{
@@ -48,23 +55,31 @@ impl Parser{
     self.expect(TokenKind::BraceOpen);
     let ifbody = self.parse_box_block();
 
-    let mut elsebody = None;
+    let mut elsebody = vec![];
 
     if self.match_curr(TokenKind::Else){
       self.expect(TokenKind::BraceOpen);
-      elsebody = Some(self.parse_box_block());
+      elsebody = self.parse_box_block();
     }
 
     Statement::If(e, ifbody, elsebody)
   }
 
   fn parse_ident(&mut self, id: String) -> Statement{
-    if self.curr() == TokenKind::ParenOpen{
-      let a = self.parse_args();
-      self.expect(TokenKind::Semicolon);
-      return Statement::FnCall(FunctionCall::new(id, a))
+    match self.curr(){
+      TokenKind::ParenOpen => {
+        let a = self.parse_args();
+        self.expect(TokenKind::Semicolon);
+        Statement::FnCall(FunctionCall::new(id, a))
+      },
+      TokenKind::Assignment => {
+        self.advance();
+        let e = self.parse_expr();
+        self.expect(TokenKind::Semicolon);
+        Statement::Mutate(id, e)
+      }
+      _ => panic!("Unexpected Identifier: {id}"),
     }
-    panic!("Unexpected Identifier: {id}");
   }
 
   fn parse_return(&mut self) -> Statement{
@@ -194,6 +209,8 @@ impl Parser{
     let expr = self.parse_expr();
     self.expect(TokenKind::Semicolon);
 
+    let t = RefCell::new(t);
+
     Statement::Assignment(name, t, expr)
   }
 
@@ -209,7 +226,7 @@ impl Parser{
         BinOp::Equal,
         Box::new(lhs),
         Box::new(self.parse_equality()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
 
@@ -218,7 +235,7 @@ impl Parser{
         BinOp::NEqual,
         Box::new(lhs),
         Box::new(self.parse_equality()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
 
@@ -233,7 +250,7 @@ impl Parser{
         BinOp::Lesser,
         Box::new(lhs),
         Box::new(self.parse_comparision()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
 
@@ -242,7 +259,7 @@ impl Parser{
         BinOp::LEq,
         Box::new(lhs),
         Box::new(self.parse_comparision()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
     if self.match_curr(TokenKind::GreaterThan){
@@ -250,7 +267,7 @@ impl Parser{
         BinOp::Greater,
         Box::new(lhs),
         Box::new(self.parse_comparision()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
     if self.match_curr(TokenKind::GreaterThanEqualTo){
@@ -258,7 +275,7 @@ impl Parser{
         BinOp::GEq,
         Box::new(lhs),
         Box::new(self.parse_comparision()),
-        Type::Primitive(PrimitiveType::Bool),
+        RefCell::new(Type::Primitive(PrimitiveType::Bool)),
       );
     }
 
@@ -273,7 +290,7 @@ impl Parser{
         BinOp::Add,
         Box::new(expr),
         Box::new(self.parse_term()),
-        Type::Unknown,
+        RefCell::new(Type::Unknown),
       );
     }
     if self.match_curr(TokenKind::Minus){
@@ -281,7 +298,7 @@ impl Parser{
         BinOp::Sub,
         Box::new(expr),
         Box::new(self.parse_term()),
-        Type::Unknown
+        RefCell::new(Type::Unknown)
       );
     }
 
@@ -296,7 +313,7 @@ impl Parser{
         BinOp::Mul,
         Box::new(expr),
         Box::new(self.parse_unary()),
-        Type::Unknown,
+        RefCell::new(Type::Unknown),
       );
     }
     if self.match_curr(TokenKind::FSlash){
@@ -304,7 +321,7 @@ impl Parser{
         BinOp::Div,
         Box::new(expr),
         Box::new(self.parse_unary()),
-        Type::Unknown,
+        RefCell::new(Type::Unknown),
       );
     }
 
@@ -316,7 +333,7 @@ impl Parser{
       return Expression::UnaryExpr(
         UnOp::ArithmeticNeg,
         Box::new(self.parse_expr()),
-        Type::Unknown,
+        RefCell::new(Type::Unknown),
       );
     }
 
@@ -332,7 +349,8 @@ impl Parser{
       },
       TokenKind::True => {self.advance(); Expression::Literal(Literal::Bool(true))},
       TokenKind::False => {self.advance(); Expression::Literal(Literal::Bool(false))},
-      TokenKind::Number(_) => {Expression::Literal(Literal::Float(self.expect_num().unwrap()))},
+      TokenKind::Float(_) => {Expression::Literal(Literal::Float(self.expect_float().unwrap()))},
+      TokenKind::Int(_) => {Expression::Literal(Literal::Int(self.expect_int().unwrap()))},
       TokenKind::StringLiteral(_) => {Expression::Literal(Literal::String(self.expect_str().unwrap()))},
       TokenKind::ParenOpen => {
         self.advance();
@@ -340,7 +358,7 @@ impl Parser{
         self.expect(TokenKind::ParenClose);
         e
       }
-      _ => {panic!()}
+      err => {panic!("Error parsing expr: {:?}", err)}
     }
   }
 
@@ -369,12 +387,22 @@ impl Parser{
     }
   }
   
-  fn expect_num(&mut self) -> Option<f32>{
+  fn expect_float(&mut self) -> Option<f32>{
     match self.curr(){
-      TokenKind::Number(num) => {
+      TokenKind::Float(i) => {
         self.advance();
-        Some(num)
+        Some(i)
       },
+      _ => None
+    }
+  }
+
+  fn expect_int(&mut self) -> Option<i32>{
+    match self.curr(){
+      TokenKind::Int(i) => {
+        self.advance();
+        Some(i)
+      }
       _ => None
     }
   }

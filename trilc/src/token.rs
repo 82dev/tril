@@ -7,7 +7,8 @@ use crate::types::Type;
 #[derive(Clone)]
 pub enum TokenKind{
   Identifier(String),
-  Number(f32),
+  Float(f32),
+  Int(i32),
   StringLiteral(String),
 
   Type(Type),
@@ -42,6 +43,8 @@ pub enum TokenKind{
 
   If,
   Else,
+
+  While,
 
   Let,
   FunctionDec,

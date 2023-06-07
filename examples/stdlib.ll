@@ -6,14 +6,12 @@ target triple = "x86_64-pc-linux-gnu"
 @.str = private unnamed_addr constant [3 x i8] c"%c\00", align 1
 
 ; Function Attrs: noinline nounwind optnone sspstrong uwtable
-define dso_local float @print_ascii(float noundef %0) #0 {
-  %2 = alloca float, align 4
-  store float %0, ptr %2, align 4
-  %3 = load float, ptr %2, align 4
-  %4 = fptosi float %3 to i32
-  %5 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %4)
-  %6 = sitofp i32 %5 to float
-  ret float %6
+define dso_local void @print_ascii(i32 noundef %0) #0 {
+  %2 = alloca i32, align 4
+  store i32 %0, ptr %2, align 4
+  %3 = load i32, ptr %2, align 4
+  %4 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %3)
+  ret void
 }
 
 declare i32 @printf(ptr noundef, ...) #1

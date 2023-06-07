@@ -157,7 +157,10 @@ impl Lexer{
       "if" => TokenKind::If,
       "else" => TokenKind::Else,
 
+      "while" => TokenKind::While,
+
       "F32" => TokenKind::Type(Type::Primitive(PrimitiveType::Float)),
+      "I32" => TokenKind::Type(Type::Primitive(PrimitiveType::Int)),
       "String" => TokenKind::Type(Type::Primitive(PrimitiveType::String)),
       "Bool" => TokenKind::Type(Type::Primitive(PrimitiveType::Bool)),
 
@@ -186,13 +189,19 @@ impl Lexer{
         while !self.is_at_end() && self.source[self.pos].is_ascii_digit(){
           self.advance();
         }
+
+        let s: String = self.source[self.last..self.pos].iter().collect();
+        let num: f32 = s.parse().expect(format!("Couldn't parse number at line:{}, col:{}", self.line, self.col).as_str());
+    
+        self.add_token(TokenKind::Float(num))
+      }
+      else{
+        let s: String = self.source[self.last..self.pos].iter().collect();
+        let num: i32 = s.parse().expect(format!("Couldn't parse number at line:{}, col:{}", self.line, self.col).as_str());
+    
+        self.add_token(TokenKind::Int(num))
       }
     }
-    
-    let s: String = self.source[self.last..self.pos].iter().collect();
-    let num: f32 = s.parse().expect(format!("Couldn't parse number at line:{}, col:{}", self.line, self.col).as_str());
-    
-    self.add_token(TokenKind::Number(num))
   }
 
   fn add_token(&mut self, kind: TokenKind){

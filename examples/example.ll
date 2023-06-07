@@ -1,27 +1,41 @@
 ; ModuleID = 'example'
 source_filename = "example"
 
-@str = private unnamed_addr constant [12 x i8] c"Hello bitch\00", align 1
-@str.1 = private unnamed_addr constant [6 x i8] c"Hello\00", align 1
+@str = private unnamed_addr constant [4 x i8] c"%c \00", align 1
 
-declare float @puts(ptr)
+declare void @puts(ptr)
 
-define float @main() {
+declare void @printf(ptr, i32)
+
+define void @print_num(i32 %n) {
 entry:
-  %a = alloca float, align 4
-  store float 3.000000e+00, ptr %a, align 4
-  %b = alloca float, align 4
-  store float 2.000000e+00, ptr %b, align 4
-  br i1 true, label %then, label %else
+  %n1 = alloca i32, align 4
+  store i32 %n, ptr %n1, align 4
+  %n2 = load i32, ptr %n1, align 4
+  call void @printf(ptr @str, i32 %n2)
+  ret void
+}
 
-then:                                             ; preds = %entry
-  %puts = call float @puts(ptr @str)
-  br label %merge
+define void @main() {
+entry:
+  %i = alloca i32, align 4
+  store i32 90, ptr %i, align 4
+  br label %whilecond
 
-else:                                             ; preds = %entry
-  %puts1 = call float @puts(ptr @str.1)
-  br label %merge
+whilecond:                                        ; preds = %whileloop, %entry
+  %i1 = load i32, ptr %i, align 4
+  %igt = icmp sgt i32 %i1, 64
+  %whilecond2 = icmp ne i1 %igt, false
+  br i1 %whilecond2, label %whileloop, label %afterwhile
 
-merge:                                            ; preds = %else, %then
-  ret float 0.000000e+00
+whileloop:                                        ; preds = %whilecond
+  %i3 = load i32, ptr %i, align 4
+  call void @print_num(i32 %i3)
+  %i4 = load i32, ptr %i, align 4
+  %isub = sub i32 %i4, 1
+  store i32 %isub, ptr %i, align 4
+  br label %whilecond
+
+afterwhile:                                       ; preds = %whilecond
+  ret void
 }
