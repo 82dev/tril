@@ -32,12 +32,12 @@ fn main() {
 
   let tok = Lexer::new(contents).tokenize();
   println!("{:?}\n\n", tok);
-  let nodes = TypeFiller::new(Parser::new(tok).parse()).fill();
-  println!("Typed: \n{:?}\n\n", nodes);
+  let (nodes, functions) = TypeFiller::new(Parser::new(tok).parse()).fill();
+  println!("Typed: \n{:#?}\n\n", nodes);
 
   let context = Context::create();
   let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());
   let builder = context.create_builder();  
 
-  println!("{:?}\n\n", codegen::CodeGenerator::new(&context, module, builder, nodes).generate(&path));
+  codegen::CodeGenerator::new(&context, module, builder, nodes, functions).generate(&path);
 }

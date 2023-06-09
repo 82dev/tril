@@ -1,16 +1,8 @@
-extern puts(String);
-extern printf(String, I32);
-
-fn print_num(n: I32){
-  printf("%c ", n);
-  return;
+type foo{
+  s: int,
+  r: int,
 }
 
 fn main(){
-  let i = 90;
-  while i > 64{
-    print_num(i);
-    i = i - 1;
-  }
-  return;
+  let f: foo = foo{s: 1, r: 2};
 }

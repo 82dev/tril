@@ -1,41 +1,32 @@
 ; ModuleID = 'example'
 source_filename = "example"
 
-@str = private unnamed_addr constant [4 x i8] c"%c \00", align 1
-
-declare void @puts(ptr)
+@str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
+@str.1 = private unnamed_addr constant [3 x i8] c"%d\00", align 1
 
 declare void @printf(ptr, i32)
 
-define void @print_num(i32 %n) {
+define i32 @inc(i32 %x) {
 entry:
-  %n1 = alloca i32, align 4
-  store i32 %n, ptr %n1, align 4
-  %n2 = load i32, ptr %n1, align 4
-  call void @printf(ptr @str, i32 %n2)
-  ret void
+  %x1 = alloca i32, align 4
+  store i32 %x, ptr %x1, align 4
+  %x2 = load i32, ptr %x1, align 4
+  %iadd = add i32 %x2, 1
+  ret i32 %iadd
 }
 
 define void @main() {
 entry:
-  %i = alloca i32, align 4
-  store i32 90, ptr %i, align 4
-  br label %whilecond
-
-whilecond:                                        ; preds = %whileloop, %entry
-  %i1 = load i32, ptr %i, align 4
-  %igt = icmp sgt i32 %i1, 64
-  %whilecond2 = icmp ne i1 %igt, false
-  br i1 %whilecond2, label %whileloop, label %afterwhile
-
-whileloop:                                        ; preds = %whilecond
-  %i3 = load i32, ptr %i, align 4
-  call void @print_num(i32 %i3)
-  %i4 = load i32, ptr %i, align 4
-  %isub = sub i32 %i4, 1
-  store i32 %isub, ptr %i, align 4
-  br label %whilecond
-
-afterwhile:                                       ; preds = %whilecond
+  %x = alloca i32, align 4
+  %inc = call i32 @inc(i32 2)
+  store i32 %inc, ptr %x, align 4
+  %y = alloca i32, align 4
+  %x1 = load i32, ptr %x, align 4
+  %inc2 = call i32 @inc(i32 %x1)
+  store i32 %inc2, ptr %y, align 4
+  %x3 = load i32, ptr %x, align 4
+  call void @printf(ptr @str, i32 %x3)
+  %y4 = load i32, ptr %y, align 4
+  call void @printf(ptr @str.1, i32 %y4)
   ret void
 }

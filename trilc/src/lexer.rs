@@ -129,18 +129,30 @@ impl Lexer{
   }
 
   fn string(&mut self){
-    while !self.is_at_end(){
-      if self.advance() == '"' {
-        break;
+    let mut result = String::new();
+    while self.source[self.pos] != '"'{
+      if self.source[self.pos] == '\\'{
+        self.advance();
+        result.push(
+          match self.advance(){
+            'n' => '\n',
+            '\\' => '\\',
+            '"' => '"',
+            err => panic!("Can't escape '{err}'"),
+          }
+        );
+        continue;
+      }
+      result.push(self.source[self.pos]);
+      self.advance();
+
+      if self.is_at_end(){
+        panic!("{}", format!("Unterminating string at line:{}, col: {}", self.line, self.col));
       }
     }
-    if self.is_at_end() {
-      panic!("{}", format!("Unterminating string at line:{}, col: {}", self.line, self.col));
-    }
+    self.advance();
 
-    self.add_token(TokenKind::StringLiteral(
-      self.source[self.last + 1..self.pos - 1].iter().collect()
-    ))
+    self.add_token(TokenKind::StringLiteral(result))
   }
 
   fn identifier(&mut self){
@@ -159,8 +171,8 @@ impl Lexer{
 
       "while" => TokenKind::While,
 
-      "F32" => TokenKind::Type(Type::Primitive(PrimitiveType::Float)),
-      "I32" => TokenKind::Type(Type::Primitive(PrimitiveType::Int)),
+      "Float" => TokenKind::Type(Type::Primitive(PrimitiveType::Float)),
+      "Int" => TokenKind::Type(Type::Primitive(PrimitiveType::Int)),
       "String" => TokenKind::Type(Type::Primitive(PrimitiveType::String)),
       "Bool" => TokenKind::Type(Type::Primitive(PrimitiveType::Bool)),
 

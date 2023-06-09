@@ -17,6 +17,7 @@ pub enum PrimitiveType{
   Float,
   String,
   Bool,
+  Array(Box<Type>, Option<u32>),
 }
 
 #[derive(Clone)]

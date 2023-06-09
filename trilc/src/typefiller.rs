@@ -19,7 +19,7 @@ impl TypeFiller{
     }
   }
 
-  pub fn fill(mut self) -> Vec<TopLevel>{
+  pub fn fill(mut self) -> (Vec<TopLevel>, HashMap<String, FunctionType>){
     for top in self.tree.to_owned(){
       match top{
         TopLevel::FnDecl(name, ft, _, _) => {
@@ -37,10 +37,8 @@ impl TypeFiller{
     for top in graft.iter_mut(){
       self.fill_top(top);
     }
-
-    println!("{:?}\n\n", self.functions);
     
-    graft
+    (graft, self.functions)
   }
 
   fn fill_top(&mut self, top: &mut TopLevel){
@@ -62,6 +60,10 @@ impl TypeFiller{
     
     for stmt in body.iter_mut(){
       self.fill_stmt(stmt);
+    }
+    
+    if ft.ret.is_none(){
+      body.push(Statement::Return(None));
     }
   }
 
@@ -105,10 +107,29 @@ impl TypeFiller{
     let t1 = self.get_expr_type(e).expect(&format!("Could not determine type of expression: '{:?}'", e));
     if *ty.borrow() == Type::Unknown{
       replace_type(ty, t1.clone());
-      println!("Ass: {:?}\n", ty);
       self.variables.insert(name.clone(), t1);
       return;
     }
+
+    //Ugly hack to set the length of array type if we dont know it
+    ty.replace_with(
+      |old|{
+        match old{
+          Type::Primitive(PrimitiveType::Array(elems, size)) => {
+            if size.is_none(){
+              match t1{
+                Type::Primitive(PrimitiveType::Array(_, s)) => Type::Primitive(PrimitiveType::Array(elems.to_owned(), s)),
+                _ => panic!()
+              }
+            }
+            else{
+              old.to_owned()
+            }
+          }
+          _ => old.to_owned()
+        }  
+      }
+    );
 
     if *ty.borrow() != t1{
       panic!("Cannot assign '{:?}' to variable '{:?}', which has type '{:?}'", name, e, ty);
@@ -126,7 +147,6 @@ impl TypeFiller{
 
     for (i, e) in fc.args.iter_mut().enumerate(){
       let et = self.get_expr_type(e).expect(&format!("Could not determine type of expression: '{:?}'", e));
-      println!("{:?}\n\n", self.tree);
       let pt = ft.params[i].clone();
       if et != *pt{
         panic!("Expected {:?} but got {:?}", pt, et);
@@ -159,8 +179,8 @@ impl TypeFiller{
         let mut t1 = self.variables.get(name)
           .expect(
             &format!("Variable '{:?}' not found.", name)).clone();
+        assert!(t1 != Type::Unknown);
         if *t == Type::Unknown{
-          println!("Here {:?}:\n{:?}",name, t1);
           *t = t1.clone();
           Ok(t1)
         }
@@ -177,7 +197,10 @@ impl TypeFiller{
 			Expression::FnCall(fcall) => {
         let ft = self.functions.get(&fcall.name)
           .expect(
-            &format!("Could'nt find function '{:?}'", fcall.name));
+            &format!("Couldn't find function '{:?}'", fcall.name));
+        for e in fcall.args.iter_mut(){
+          self.get_expr_type(e);
+        }
         
         match ft.ret.clone(){
           Some(t) => Ok(*t),

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches, rc::Rc, cell::RefCell};
 use either::Either;
 
-use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum, InstructionValue}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum, InstructionValue, ArrayValue, IntValue}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
 
 use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType}};
 
@@ -11,16 +11,20 @@ pub struct CodeGenerator<'ctx>{
 	pub builder: Builder<'ctx>,
 	pub nodes: Vec<TopLevel>,
 	variables: HashMap<String, PointerValue<'ctx>>,
+	functions: HashMap<String, FunctionType>,
+	zero: IntValue<'ctx>,
 }
 
 impl<'ctx> CodeGenerator<'ctx>{
-	pub fn new(context: &'ctx Context, module: Module<'ctx>, builder: Builder<'ctx>, nodes: Vec<TopLevel>) -> CodeGenerator<'ctx>{
+	pub fn new(context: &'ctx Context, module: Module<'ctx>, builder: Builder<'ctx>, nodes: Vec<TopLevel>, functions: HashMap<String, FunctionType>) -> CodeGenerator<'ctx>{
 		CodeGenerator{
 			context,
 			module,
 			builder,
 			nodes,
 			variables: HashMap::new(),
+			functions,
+			zero: context.i32_type().const_int(0, false),
 		}
 	}
 
@@ -29,7 +33,6 @@ impl<'ctx> CodeGenerator<'ctx>{
 		for top in self.nodes.to_owned(){
 			self.gen_top(top);
 		}
-		self.module.print_to_stderr();
 		self.module.print_to_file(path).unwrap();
 
 		self.nodes
@@ -170,7 +173,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 		}
 	}
 
-	fn gen_call(&mut self, fcall: FunctionCall) -> Either<BasicValueEnum<'ctx>, InstructionValue<'ctx>>{
+	fn gen_call(&self, fcall: FunctionCall) -> Either<BasicValueEnum<'ctx>, InstructionValue<'ctx>>{
 		let func = self.module.get_function(&fcall.name).unwrap();
 		assert_eq!(func.count_params() as usize, fcall.args.len());
 
@@ -192,7 +195,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 		let func = self.module.add_function(name.as_str(), ft, None);
 	}
 
-	fn gen_expression(&mut self, expr: Expression) -> BasicValueEnum<'ctx>{
+	fn gen_expression(&self, expr: Expression) -> BasicValueEnum<'ctx>{
 		match expr{
 			Expression::Literal(lit) => {
 				match lit{
@@ -201,12 +204,11 @@ impl<'ctx> CodeGenerator<'ctx>{
 					Literal::Bool(b) => self.context.bool_type().const_int(if b {1} else {0}, false).as_basic_value_enum(),
 					Literal::String(s) => {
 						self.builder.build_global_string_ptr(s.as_str(), "str").as_pointer_value().as_basic_value_enum()
-					}
+					},
 				}
 			},
 
 			Expression::Variable(name, ty) => {
-				println!("{:?}", ty);
 				self.builder.build_load(self.get_type(ty), *self.variables.get(&name).unwrap(), &name)
 			},
 
@@ -285,6 +287,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 						},
 						PrimitiveType::Bool => todo!(),
 						PrimitiveType::String => panic!(),
+						PrimitiveType::Array(elems, size) => todo!(),
 					}
 				}
 				else {unreachable!()}
@@ -314,8 +317,8 @@ impl<'ctx> CodeGenerator<'ctx>{
 				Literal::Bool(_) => Type::Primitive(PrimitiveType::Bool),
 			},
 			Expression::FnCall(fcall) => {
-				self.module.get_function(&fcall.name).unwrap().get_type();
-				todo!()
+				//TODO: WTF FIXME:
+				self.functions.get(&fcall.name).unwrap().ret.clone().expect("Function {fcall.name} returns VOID!").as_ref().clone()
 			},
 			Expression::UnaryExpr(_, ex, ty) => {
 				ty.into_inner()
@@ -351,6 +354,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 				.into(),
 			PrimitiveType::Int => self.context.i32_type().into(),
 			PrimitiveType::Bool => self.context.bool_type().into(),
+			PrimitiveType::Array(ty, size) => self.get_type(*ty).array_type(size.unwrap()).into()
 		}
 	}
 }

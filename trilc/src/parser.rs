@@ -77,7 +77,7 @@ impl Parser{
         let e = self.parse_expr();
         self.expect(TokenKind::Semicolon);
         Statement::Mutate(id, e)
-      }
+      },
       _ => panic!("Unexpected Identifier: {id}"),
     }
   }
@@ -340,13 +340,15 @@ impl Parser{
     match self.curr(){
       TokenKind::Identifier(_) => {
         let n = self.expect_id().unwrap();
-        if self.curr() == TokenKind::ParenOpen{
-          let a = self.parse_args();
-          return Expression::FnCall(FunctionCall::new(n, a));
+        match self.curr(){
+          TokenKind::ParenOpen => {
+            let a = self.parse_args();
+            Expression::FnCall(FunctionCall::new(n, a))
+          },
+          _ => Expression::Variable(n, Type::Unknown)
         }
-        //TODO:FIXME:
-        Expression::Variable(n, Type::Unknown)
       },
+
       TokenKind::True => {self.advance(); Expression::Literal(Literal::Bool(true))},
       TokenKind::False => {self.advance(); Expression::Literal(Literal::Bool(false))},
       TokenKind::Float(_) => {Expression::Literal(Literal::Float(self.expect_float().unwrap()))},
@@ -357,13 +359,12 @@ impl Parser{
         let e = self.parse_expr();
         self.expect(TokenKind::ParenClose);
         e
-      }
+      },
       err => {panic!("Error parsing expr: {:?}", err)}
     }
   }
 
   fn expect(&mut self, kind: TokenKind){
-    println!("{:?} {:?}", self.current, kind);
     if !self.match_curr(kind){
       panic!()
     }
