@@ -345,6 +345,16 @@ impl Parser{
             let a = self.parse_args();
             Expression::FnCall(FunctionCall::new(n, a))
           },
+          TokenKind::SquareOpen => {
+            //TODO: FIXME: MultiDimensional Indexing
+            //Add a while match_curr(SqOpen)
+            //keep track of last array
+            //modify node to have Expression or string Union ArrayIndex instead of string for index base
+            self.advance();
+            let e = self.parse_expr();
+            self.expect(TokenKind::SquareClose);
+            Expression::ArrayIndex(n, Box::new(e), RefCell::new(Type::Unknown))
+          }
           _ => Expression::Variable(n, Type::Unknown)
         }
       },
@@ -360,6 +370,22 @@ impl Parser{
         self.expect(TokenKind::ParenClose);
         e
       },
+
+      TokenKind::SquareOpen => {
+        self.advance();
+        let mut exprs = vec![];
+        while !self.match_curr(TokenKind::SquareClose){
+          loop{
+            let e = self.parse_expr();
+            exprs.push(Box::new(e));
+            if !self.match_curr(TokenKind::Comma){
+              break;
+            }
+          }
+        }
+        Expression::Literal(Literal::ArrayLiteral(exprs, RefCell::new(Type::Unknown)))
+      },
+      
       err => {panic!("Error parsing expr: {:?}", err)}
     }
   }
@@ -384,6 +410,16 @@ impl Parser{
         self.advance();
         Some(t)
       },
+      TokenKind::SquareOpen => {
+        self.advance();
+        let t = self.expect_type().unwrap();
+        let mut size = None;
+        if self.match_curr(TokenKind::Semicolon){
+          size = self.expect_int().map(|i| i as u32);
+        }
+        self.expect(TokenKind::SquareClose);
+        Some(Type::Primitive(PrimitiveType::Array(Box::new(t), size)))
+      }
       _ => None
     }
   }

@@ -188,11 +188,38 @@ impl TypeFiller{
           Ok(t1)
         }
       },
+      Expression::ArrayIndex(name, ind, ty) => {
+        let t = self.variables.get(name)
+          .expect(
+            &format!("Variable '{:?}' not found.", name)).clone();
+        let t = match t{
+          Type::Primitive(PrimitiveType::Array(t, _)) => t,
+          _ => unreachable!()
+        };
+        assert!(self.get_expr_type(ind).unwrap() == Type::Primitive(PrimitiveType::Int));
+        replace_type(ty, *t.clone());
+        Ok(*t)
+      }
+      
 			Expression::Literal(lit) => match lit{
 				Literal::Int(_) => Ok(Type::Primitive(PrimitiveType::Int)),
 				Literal::Float(_) => Ok(Type::Primitive(PrimitiveType::Float)),
 				Literal::String(_) => Ok(Type::Primitive(PrimitiveType::String)),
 				Literal::Bool(_) => Ok(Type::Primitive(PrimitiveType::Bool)),
+        Literal::ArrayLiteral(exprs, ty) => {
+          //Dirty hack FIXME: TODO:
+          let mut t = Type::Unknown;
+          for (i, e) in exprs.iter_mut().enumerate(){
+            let t1 = self.get_expr_type(e).unwrap();
+            if i == 0{
+              t = t1;
+              continue;
+            }
+            assert!(t == t1);
+          }
+          replace_type(ty, t.clone());
+          Ok(Type::Primitive(PrimitiveType::Array(Box::new(t), Some(exprs.len() as u32))))
+        }
 			},
 			Expression::FnCall(fcall) => {
         let ft = self.functions.get(&fcall.name)

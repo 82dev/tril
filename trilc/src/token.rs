@@ -19,6 +19,9 @@ pub enum TokenKind{
   BraceOpen,
   BraceClose,
 
+  SquareOpen,
+  SquareClose,
+
   Colon,
   Semicolon,
 

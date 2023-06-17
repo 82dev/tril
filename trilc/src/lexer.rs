@@ -49,6 +49,9 @@ impl Lexer{
       '{' => self.add_token(TokenKind::BraceOpen),
       '}' => self.add_token(TokenKind::BraceClose),
 
+      '[' => self.add_token(TokenKind::SquareOpen),
+      ']' => self.add_token(TokenKind::SquareClose),
+
       ':' => self.add_token(TokenKind::Colon),
       ';' => self.add_token(TokenKind::Semicolon),
 

@@ -1,6 +1,4 @@
-#include <stdio.h>
-void main(){
-  int x[] = {1, 2};
-  int y = x[1];
-  printf("%d ", y);
+void foo(){
+  int x[] = {1, 2, 3};
+  printf("%d ", x[2]);
 }

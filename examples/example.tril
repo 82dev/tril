@@ -1,8 +1,7 @@
-type foo{
-  s: int,
-  r: int,
-}
+extern printf(String, Int);
 
-fn main(){
-  let f: foo = foo{s: 1, r: 2};
+fn main() -> Int{
+  let x = [-31415, 42, 73];
+  printf("%d ", x[0]);
+  return 0;
 }

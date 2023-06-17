@@ -31,8 +31,10 @@ fn main() {
   path.set_extension("ll");
 
   let tok = Lexer::new(contents).tokenize();
-  println!("{:?}\n\n", tok);
-  let (nodes, functions) = TypeFiller::new(Parser::new(tok).parse()).fill();
+  // println!("{:?}\n\n", tok);
+  let ast = Parser::new(tok).parse();
+  println!("{:#?}", ast);
+  let (nodes, functions) = TypeFiller::new(ast).fill();
   println!("Typed: \n{:#?}\n\n", nodes);
 
   let context = Context::create();

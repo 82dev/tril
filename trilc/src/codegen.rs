@@ -139,9 +139,24 @@ impl<'ctx> CodeGenerator<'ctx>{
 		expr: Expression,
 	){
 		let ty = ty.into_inner();
-		let ptr = self.builder.build_alloca(self.get_type(ty), name.as_str());
+		let arr = match ty{
+			Type::Primitive(PrimitiveType::Array(_, _)) => true,
+			_ => false,
+		};
+
+		let ty = self.get_type(ty);
+		
+		let ptr = self.builder.build_alloca(ty, name.as_str());
 		let e = self.gen_expression(expr);
-		self.builder.build_store(ptr, e);
+
+		if arr{
+			let load = self.builder.build_load(ty, e.into_pointer_value(), "load");
+			self.builder
+				.build_store(ptr, load);
+		}
+		else{
+			self.builder.build_store(ptr, e);
+		}
 		self.variables.insert(name, ptr);
 	}
 
@@ -197,6 +212,21 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 	fn gen_expression(&self, expr: Expression) -> BasicValueEnum<'ctx>{
 		match expr{
+			Expression::ArrayIndex(name, ind, ty) => {
+				let array_ptr = self.variables.get(&name).unwrap();
+				let array_type = self.get_type(ty.into_inner());
+				let gep = unsafe{
+					let index = self.gen_expression(*ind).into_int_value();
+					self.builder
+						.build_gep(array_type, *array_ptr, &[index], "gep_index")
+				};
+
+				println!("{:?}", gep);
+				
+				self.builder
+					.build_load(array_type, gep, "index").as_basic_value_enum()
+			}
+			
 			Expression::Literal(lit) => {
 				match lit{
 					Literal::Int(i) => self.context.i32_type().const_int(i as u64, false).as_basic_value_enum(),
@@ -205,6 +235,24 @@ impl<'ctx> CodeGenerator<'ctx>{
 					Literal::String(s) => {
 						self.builder.build_global_string_ptr(s.as_str(), "str").as_pointer_value().as_basic_value_enum()
 					},
+					Literal::ArrayLiteral(exprs, ty) => {
+						let arr_type = self.get_type(ty.into_inner()).array_type(exprs.len() as u32);
+						let arr_alloca = self.builder.build_alloca(arr_type, "arrliteral");
+						for (i, expr) in exprs.into_iter().enumerate(){
+							let e = self.gen_expression(*expr);
+							let elem = unsafe{
+								let index = self.context.i32_type().const_int(i as u64, false);
+								self.builder
+									.build_gep(arr_type.get_element_type(), arr_alloca, &[index], "gep")
+							};
+							self.builder
+								.build_store(
+									elem,
+									e
+								);
+						}
+						arr_alloca.as_basic_value_enum()
+					}
 				}
 			},
 
@@ -309,12 +357,14 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 	fn get_expr_type(&self, e: Expression) -> Type{
 		match e{
+			Expression::ArrayIndex(_, _, t) => t.into_inner(),
 			Expression::Variable(_, t) => t,
 			Expression::Literal(lit) => match lit{
 				Literal::Int(_) => Type::Primitive(PrimitiveType::Int),
 				Literal::Float(_) => Type::Primitive(PrimitiveType::Float),
 				Literal::String(_) => Type::Primitive(PrimitiveType::String),
 				Literal::Bool(_) => Type::Primitive(PrimitiveType::Bool),
+				Literal::ArrayLiteral(exprs, ty) => Type::Primitive(PrimitiveType::Array(Box::new(ty.into_inner()), Some(exprs.len() as u32)))
 			},
 			Expression::FnCall(fcall) => {
 				//TODO: WTF FIXME:

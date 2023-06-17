@@ -3,19 +3,16 @@ source_filename = "test.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-@__const.main.x = private unnamed_addr constant [2 x i32] [i32 1, i32 2], align 4
+@__const.foo.x = private unnamed_addr constant [3 x i32] [i32 1, i32 2, i32 3], align 4
 @.str = private unnamed_addr constant [4 x i8] c"%d \00", align 1
 
 ; Function Attrs: noinline nounwind optnone sspstrong uwtable
-define dso_local void @main() #0 {
-  %1 = alloca [2 x i32], align 4
-  %2 = alloca i32, align 4
-  call void @llvm.memcpy.p0.p0.i64(ptr align 4 %1, ptr align 4 @__const.main.x, i64 8, i1 false)
-  %3 = getelementptr inbounds [2 x i32], ptr %1, i64 0, i64 1
-  %4 = load i32, ptr %3, align 4
-  store i32 %4, ptr %2, align 4
-  %5 = load i32, ptr %2, align 4
-  %6 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %5)
+define dso_local void @foo() #0 {
+  %1 = alloca [3 x i32], align 4
+  call void @llvm.memcpy.p0.p0.i64(ptr align 4 %1, ptr align 4 @__const.foo.x, i64 12, i1 false)
+  %2 = getelementptr inbounds [3 x i32], ptr %1, i64 0, i64 2
+  %3 = load i32, ptr %2, align 4
+  %4 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %3)
   ret void
 }
 

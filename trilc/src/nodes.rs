@@ -29,6 +29,7 @@ pub enum Expression{
   Literal(Literal),
   FnCall(FunctionCall),
   Variable(String, Type),
+  ArrayIndex(String, Box<Expression>, RefCell<Type>),
 }
 
 #[derive(Debug)]
@@ -38,6 +39,7 @@ pub enum Literal{
   Float(f32),
   String(String),
   Bool(bool),
+  ArrayLiteral(Vec<Box<Expression>>, RefCell<Type>)
 }
 
 #[derive(Debug)]

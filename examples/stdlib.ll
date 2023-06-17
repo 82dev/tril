@@ -3,18 +3,22 @@ source_filename = "../stdlib/stdlib.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-@.str = private unnamed_addr constant [3 x i8] c"%c\00", align 1
+@.str = private unnamed_addr constant [2 x i8] c"r\00", align 1
 
 ; Function Attrs: noinline nounwind optnone sspstrong uwtable
-define dso_local void @print_ascii(i32 noundef %0) #0 {
-  %2 = alloca i32, align 4
-  store i32 %0, ptr %2, align 4
-  %3 = load i32, ptr %2, align 4
-  %4 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %3)
-  ret void
+define dso_local ptr @readfile(ptr noundef %0) #0 {
+  %2 = alloca ptr, align 8
+  %3 = alloca ptr, align 8
+  %4 = alloca ptr, align 8
+  store ptr %0, ptr %3, align 8
+  %5 = load ptr, ptr %3, align 8
+  %6 = call noalias ptr @fopen(ptr noundef %5, ptr noundef @.str)
+  store ptr %6, ptr %4, align 8
+  %7 = load ptr, ptr %2, align 8
+  ret ptr %7
 }
 
-declare i32 @printf(ptr noundef, ...) #1
+declare noalias ptr @fopen(ptr noundef, ptr noundef) #1
 
 attributes #0 = { noinline nounwind optnone sspstrong uwtable "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
