@@ -1,7 +1,11 @@
 extern printf(String, Int);
 
+fn foo(x: [Int; 3]) -> Int{
+  return x[0];
+}
+
 fn main() -> Int{
-  let x = [-31415, 42, 73];
-  printf("%d ", x[0]);
+  let x = [69, 3, 5];
+  printf("%d \n", foo(x));
   return 0;
 }
