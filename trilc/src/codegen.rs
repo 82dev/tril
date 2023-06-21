@@ -1,31 +1,44 @@
 use std::{path::PathBuf, collections::HashMap, unreachable, todo, matches, rc::Rc, cell::RefCell};
 use either::Either;
 
-use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum, InstructionValue, ArrayValue, IntValue}, types::{FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{FloatValue, BasicMetadataValueEnum, PointerValue, BasicValue, BasicValueEnum, InstructionValue, ArrayValue, IntValue}, types::{StructType as InkwellStructType, FloatType, PointerType, BasicTypeEnum, BasicType, BasicMetadataTypeEnum }, AddressSpace, IntPredicate, FloatPredicate};
 
-use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType}};
+use crate::{nodes::{UnOp, BinOp, TopLevel, Statement, Expression, Literal, FunctionCall}, types::{Type, PrimitiveType, FunctionType, StructType}};
 
 pub struct CodeGenerator<'ctx>{
 	pub context: &'ctx Context,
 	pub module: Module<'ctx>,
 	pub builder: Builder<'ctx>,
 	pub nodes: Vec<TopLevel>,
+	function_rets: HashMap<String, Option<Type>>,
+	structs: HashMap<String, StructType>,
 	variables: HashMap<String, PointerValue<'ctx>>,
-	functions: HashMap<String, FunctionType>,
 	zero: IntValue<'ctx>,
 }
 
 impl<'ctx> CodeGenerator<'ctx>{
 	pub fn new(context: &'ctx Context, module: Module<'ctx>, builder: Builder<'ctx>, nodes: Vec<TopLevel>, functions: HashMap<String, FunctionType>) -> CodeGenerator<'ctx>{
-		CodeGenerator{
+		let mut cg = CodeGenerator{
 			context,
 			module,
 			builder,
 			nodes,
+			function_rets: HashMap::new(),
+			structs: HashMap::new(),
 			variables: HashMap::new(),
-			functions,
 			zero: context.i32_type().const_int(0, false),
+		};
+
+		for (name, func) in functions{
+			let ft = cg.get_fn_type(func.clone());
+			cg.module.add_function(name.as_str(), ft, None);
+			cg.function_rets.insert(name, match func.ret{
+				Some(t) => Some(*t),
+				None => None
+			});
 		}
+
+		cg
 	}
 
 	pub fn generate(mut self, path: &PathBuf) -> Vec<TopLevel>{
@@ -34,7 +47,6 @@ impl<'ctx> CodeGenerator<'ctx>{
 			self.gen_top(top);
 		}
 		self.module.print_to_file(path).unwrap();
-
 		self.nodes
 	}
 
@@ -42,8 +54,15 @@ impl<'ctx> CodeGenerator<'ctx>{
 		match top{
 			TopLevel::FnDecl(name, ftype, params, body) => self.gen_fn_decl(name, ftype, params, body),
 			TopLevel::Extern(name, ftype) => self.gen_extern(name, ftype),
-			TopLevel::StructDecl(_) => todo!(),
+			TopLevel::StructDecl(name, st) => self.gen_struct_decl(name, st),
 		}
+	}
+
+	fn gen_struct_decl(&mut self, name: String, st: StructType){
+		// let st: Vec<BasicTypeEnum<'_>> = st.contents.into_iter().map(|(_, t)| self.get_type(*t)).collect();
+		// let ty = self.context.struct_type(&st, false);
+		self.structs.insert(name, st);
+		// self.module.add_global(ty, Some(AddressSpace::default()), name.as_str());
 	}
 
 	fn gen_statement(&mut self, stmt: Statement){
@@ -167,8 +186,7 @@ impl<'ctx> CodeGenerator<'ctx>{
 		params: Vec<String>,
 		body: Vec<Statement>)
 	{
-		let ft = self.get_fn_type(ftype);
-		let func = self.module.add_function(name.as_str(), ft, None);
+		let func = self.module.get_function(name.as_str()).unwrap();
 
 		let bb = self.context.append_basic_block(func, "entry");
 		self.builder.position_at_end(bb);
@@ -206,12 +224,44 @@ impl<'ctx> CodeGenerator<'ctx>{
 		ftype: FunctionType,
 	)
 	{
-		let ft = self.get_fn_type(ftype);
-		let func = self.module.add_function(name.as_str(), ft, None);
+		//Our first functin loop already declares it
+		// let ft = self.get_fn_type(ftype);
+		// let func = self.module.add_function(name.as_str(), ft, None);
 	}
 
 	fn gen_expression(&self, expr: Expression) -> BasicValueEnum<'ctx>{
 		match expr{
+			Expression::StructAccess(e, member, index) => {
+				let ex = self.gen_expression(*e);
+				let st = ex.into_struct_value().get_type();
+				let index = index.into_inner();
+				let ty = st.get_field_type_at_index(index).unwrap();
+				let alloc = self.builder.build_alloca(st, "allocstruct");
+				self.builder.build_store(alloc, ex);
+				let gep = unsafe {
+					println!("{:?}", alloc);
+					self.builder.build_struct_gep(ty, alloc, index, "structgep").expect("Ooops")
+        };
+				self.builder.build_load(ty, gep, "load").as_basic_value_enum()
+			},
+			
+			Expression::StructConstructor(name, contents) => {
+				let st = self.structs.get(&name).unwrap().to_owned();
+				let ty = self.get_type(Type::Struct(st));
+
+				let ptr = self.builder.build_alloca(ty, name.as_str());
+
+				for (i, e) in contents.into_iter().enumerate(){
+					let ex = self.gen_expression(*e);
+					let gep = unsafe {
+						self.builder.build_struct_gep(ty, ptr, i as u32, "structgep").unwrap()
+          };
+					self.builder.build_store(gep, ex);
+				}
+
+				ptr.as_basic_value_enum()
+			},
+			
 			Expression::ArrayIndex(name, ind, ty) => {
 				let array_ptr = self.variables.get(&name).unwrap();
 				let array_type = self.get_type(ty.into_inner());
@@ -349,7 +399,15 @@ impl<'ctx> CodeGenerator<'ctx>{
 			Type::Func(ft) => {
 				self.get_fn_type(ft).ptr_type(AddressSpace::default()).into()
 			}
-			Type::Struct(_) => todo!(),
+			Type::Struct(st) => {
+				let ty: Vec<BasicTypeEnum<'ctx>> = st.contents.into_iter().map(|(_, ty)| self.get_type(ty.into())).collect();
+				
+				self.context.struct_type(
+					&ty,
+					false
+				).as_basic_type_enum()
+			},
+			Type::Identifier(id) => unreachable!("{}", id),
 			Type::Unknown => unreachable!(),
 			Type::Void => unreachable!(),
 		}
@@ -357,6 +415,16 @@ impl<'ctx> CodeGenerator<'ctx>{
 
 	fn get_expr_type(&self, e: Expression) -> Type{
 		match e{
+			Expression::StructAccess(expr, member, index) => {
+        let t = self.get_expr_type(*expr);
+        match t{
+          Type::Struct(st) => {
+						*st.contents.get(index.into_inner() as usize).unwrap().1.to_owned()
+          }
+					_ => unreachable!()
+        }
+			},
+			Expression::StructConstructor(string, _) => Type::Struct(self.structs.get(&string).unwrap().to_owned()),
 			Expression::ArrayIndex(_, _, t) => t.into_inner(),
 			Expression::Variable(_, t) => t,
 			Expression::Literal(lit) => match lit{
@@ -368,7 +436,13 @@ impl<'ctx> CodeGenerator<'ctx>{
 			},
 			Expression::FnCall(fcall) => {
 				//TODO: WTF FIXME:
-				self.functions.get(&fcall.name).unwrap().ret.clone().expect("Function {fcall.name} returns VOID!").as_ref().clone()
+				// self.functions.get(&fcall.name).unwrap().ret.clone().expect("Function {fcall.name} returns VOID!").as_ref().clone()
+				self.function_rets.get(&fcall.name)
+					.unwrap()
+					.to_owned()
+					.expect(
+						format!("Function {} returns VOID!", fcall.name).as_str()
+					).clone()
 			},
 			Expression::UnaryExpr(_, ex, ty) => {
 				ty.into_inner()

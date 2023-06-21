@@ -25,6 +25,8 @@ pub enum TokenKind{
   Colon,
   Semicolon,
 
+  Dot,
+
   Comma,
 
   Assignment,
@@ -52,6 +54,8 @@ pub enum TokenKind{
   Let,
   FunctionDec,
   MapsTo,
+
+  Struct,
 
   Return,
 

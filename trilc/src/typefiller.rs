@@ -1,11 +1,12 @@
 use std::{collections::HashMap, println,  cell::RefCell, ptr::replace};
 
-use crate::{nodes::{TopLevel, Statement, Expression, FunctionCall, Literal}, types::{Type, FunctionType, PrimitiveType}};
+use crate::{nodes::{TopLevel, Statement, Expression, FunctionCall, Literal}, types::{Type, FunctionType, PrimitiveType, StructType}};
 
 pub struct TypeFiller{
   tree: Vec<TopLevel>,
   variables: HashMap<String, Type>,
   functions: HashMap<String, FunctionType>,
+  structs: HashMap<String, StructType>,
   current_ret: Option<Type>,
 }
 
@@ -15,6 +16,7 @@ impl TypeFiller{
       tree,
       variables: HashMap::new(),
       functions: HashMap::new(),
+      structs  : HashMap::new(),
       current_ret: None,
     }
   }
@@ -22,13 +24,27 @@ impl TypeFiller{
   pub fn fill(mut self) -> (Vec<TopLevel>, HashMap<String, FunctionType>){
     for top in self.tree.to_owned(){
       match top{
-        TopLevel::FnDecl(name, ft, _, _) => {
+        TopLevel::FnDecl(name, mut ft, _, _) => {       
+          ft.ret = ft.ret.map(|s|{
+            match *s{
+              Type::Identifier(id) => Box::new(Type::Struct(self.structs.get(&id).unwrap().to_owned())),
+              x => Box::new(x)
+            }
+          });
+
+          ft.params = ft.params.iter().map(|s|{
+            match *s.to_owned(){
+              Type::Identifier(id) => Box::new(Type::Struct(self.structs.get(&id).unwrap().to_owned())),
+              x => Box::new(x)
+            }
+          }).collect();
+          
           if self.functions.insert(name.clone(), ft).is_some(){
             panic!("Cant redifine function!: {:?}", name);
           };
         },
         TopLevel::Extern(name, ft) => {self.functions.insert(name, ft);},
-        _ => (),
+        TopLevel::StructDecl(name, st) => {self.structs.insert(name, st);}
       }
     }
 
@@ -53,6 +69,24 @@ impl TypeFiller{
       Some(t)  => Some(*t),
       None => None,
     };
+
+    self.current_ret = match self.current_ret.clone(){
+      Some(Type::Identifier(id)) => {
+        let st = self.structs.get(&id).map(|s| Type::Struct(s.clone())).unwrap();
+        ft.ret = Some(Box::new(st.clone()));
+
+        Some(st)
+      },
+      r => r
+    };
+
+    for t in ft.params.iter_mut(){
+      if let Type::Identifier(id) = *t.clone(){
+        let st = self.structs.get(&id).map(|s| Type::Struct(s.clone())).unwrap();
+        *t = Box::new(st);
+      }
+    }
+    
     self.variables.clear();
     for (i, p) in ft.params.iter().enumerate(){
       self.variables.insert(params[i].clone(), *p.clone());
@@ -126,6 +160,10 @@ impl TypeFiller{
               old.to_owned()
             }
           }
+          Type::Identifier(id) => {
+            let st = self.structs.get(id).unwrap().clone();
+            Type::Struct(st)
+          }
           _ => old.to_owned()
         }  
       }
@@ -175,11 +213,52 @@ impl TypeFiller{
 
   fn get_expr_type(&self, e: &mut Expression) -> Result<Type, ()>{
 		match e{
+      Expression::StructAccess(expr, member, index) => {
+        let t = self.get_expr_type(&mut *expr);
+       
+        match t.unwrap(){
+          Type::Struct(st) => {
+            for (i, (memname, memtype)) in st.contents.into_iter().enumerate(){
+              if memname == *member{
+                index.replace(i as u32);
+                return Ok(*memtype);
+              }
+            }
+
+            panic!("Couldn't find '{:?}' in struct '{:?}'", member, expr);
+            Err(())
+          }
+          err => {
+            panic!("'{:?}' is not a struct! {:?}", expr, err);
+            Err(())
+          }
+        }
+      }
+      
+      Expression::StructConstructor(name, contents) => {
+        let st = self.structs.get(name).expect(format!("Cannot find struct {:?}", name).as_str()).to_owned();
+
+        for (i, expr) in contents.iter_mut().enumerate(){
+          let et = self.get_expr_type(expr).unwrap();
+          let ct = st.contents.get(i).unwrap().to_owned().1;
+          assert_eq!(et, *ct);
+        }
+
+        Ok(Type::Struct(st))
+      },
+      
 			Expression::Variable(name, t) => {
         let mut t1 = self.variables.get(name)
           .expect(
             &format!("Variable '{:?}' not found.", name)).clone();
         assert!(t1 != Type::Unknown);
+
+        if let Type::Identifier(id) = t1{
+          let st = Type::Struct(self.structs.get(&id).unwrap().to_owned());
+          *t = st.clone();
+          return Ok(st);
+        }
+        
         if *t == Type::Unknown{
           *t = t1.clone();
           Ok(t1)

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Clone)]
 #[derive(Debug)]
 #[derive(PartialEq)]
@@ -6,6 +8,7 @@ pub enum Type{
   Func(FunctionType),
   Struct(StructType),
   Void,
+  Identifier(String),
   Unknown,
 }
 
@@ -24,8 +27,15 @@ pub enum PrimitiveType{
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct StructType{
-  name: String,
-  contents: Vec<(String, Box<Type>)>,
+  pub contents: Vec<(String, Box<Type>)>,
+}
+
+impl StructType{
+  pub fn new(contents: Vec<(String, Box<Type>)>) -> Self{
+    Self{
+      contents
+    }
+  }
 }
 
 #[derive(Clone)]

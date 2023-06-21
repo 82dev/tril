@@ -1,6 +1,6 @@
-use std::{println, rc::Rc, cell::RefCell};
+use std::{println, rc::Rc, cell::RefCell, collections::HashMap};
 
-use crate::{token::{Token, TokenKind}, nodes::{UnOp, BinOp, TopLevel, Statement, FunctionCall, Expression, Literal,}, types::{Type, FunctionType, PrimitiveType}};
+use crate::{token::{Token, TokenKind}, nodes::{UnOp, BinOp, TopLevel, Statement, FunctionCall, Expression, Literal,}, types::{Type, FunctionType, PrimitiveType, StructType}};
 
 pub struct Parser{
   tokens: Vec<Token>,
@@ -29,8 +29,26 @@ impl Parser{
     match self.advance(){
       TokenKind::FunctionDec => self.parse_fn(),
       TokenKind::Extern => self.parse_extern(),
+      TokenKind::Struct => self.parse_struct(),
       err => panic!("Unexpected token: {:?}", err)
     }
+  }
+
+  fn parse_struct(&mut self) -> TopLevel{
+    let name = self.expect_id().unwrap();
+    let mut contents = vec![];
+    self.expect(TokenKind::BraceOpen);
+
+    while !self.match_curr(TokenKind::BraceClose){
+      let name = self.expect_id().unwrap();
+      self.expect(TokenKind::Colon);
+      let ty = Box::new(self.expect_type().unwrap());
+      //Consume comma if there is one.
+      self.match_curr(TokenKind::Comma);
+      contents.push((name, ty));
+    }
+
+    TopLevel::StructDecl(name, StructType::new(contents))
   }
 
   fn parse_statement(&mut self) -> Statement{
@@ -306,13 +324,13 @@ impl Parser{
   }
 
   fn parse_factor(&mut self) -> Expression{
-    let mut expr = self.parse_unary();
+    let mut expr = self.parse_member();
 
     if self.match_curr(TokenKind::Asterisk){
       expr = Expression::BinExpr(
         BinOp::Mul,
         Box::new(expr),
-        Box::new(self.parse_unary()),
+        Box::new(self.parse_member()),
         RefCell::new(Type::Unknown),
       );
     }
@@ -320,8 +338,21 @@ impl Parser{
       expr = Expression::BinExpr(
         BinOp::Div,
         Box::new(expr),
-        Box::new(self.parse_unary()),
+        Box::new(self.parse_member()),
         RefCell::new(Type::Unknown),
+      );
+    }
+
+    expr
+  }
+
+  fn parse_member(&mut self) -> Expression{
+    let mut expr = self.parse_unary();
+    if self.match_curr(TokenKind::Dot){
+      expr = Expression::StructAccess(
+        Box::new(expr),
+        self.expect_id().unwrap(),
+        RefCell::new(0),
       );
     }
 
@@ -354,7 +385,18 @@ impl Parser{
             let e = self.parse_expr();
             self.expect(TokenKind::SquareClose);
             Expression::ArrayIndex(n, Box::new(e), RefCell::new(Type::Unknown))
-          }
+          },
+          TokenKind::BraceOpen => {
+            self.advance();
+            let mut contents = vec![];
+            while !self.match_curr(TokenKind::BraceClose){
+              let e = self.parse_expr();
+              self.match_curr(TokenKind::Comma);
+              contents.push(Box::new(e));
+            }
+
+            Expression::StructConstructor(n, contents)
+          },
           _ => Expression::Variable(n, Type::Unknown)
         }
       },
@@ -386,13 +428,13 @@ impl Parser{
         Expression::Literal(Literal::ArrayLiteral(exprs, RefCell::new(Type::Unknown)))
       },
       
-      err => {panic!("Error parsing expr: {:?}", err)}
+      err => {panic!("Error parsing expr: {:?} at {:?}", err, self.current)}
     }
   }
 
   fn expect(&mut self, kind: TokenKind){
-    if !self.match_curr(kind){
-      panic!()
+    if !self.match_curr(kind.clone()){
+      panic!("Expected {:?} but found {:?}", kind, self.curr());
     }
   }
 
@@ -419,6 +461,10 @@ impl Parser{
         }
         self.expect(TokenKind::SquareClose);
         Some(Type::Primitive(PrimitiveType::Array(Box::new(t), size)))
+      },
+      TokenKind::Identifier(id) => {
+        self.advance();
+        Some(Type::Identifier(id))
       }
       _ => None
     }

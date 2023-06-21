@@ -33,9 +33,10 @@ fn main() {
   let tok = Lexer::new(contents).tokenize();
   // println!("{:?}\n\n", tok);
   let ast = Parser::new(tok).parse();
-  println!("{:#?}", ast);
+  // println!("{:#?}", ast);
   let (nodes, functions) = TypeFiller::new(ast).fill();
   println!("Typed: \n{:#?}\n\n", nodes);
+  // println!("{:?}", functions);
 
   let context = Context::create();
   let module = context.create_module(path.file_stem().unwrap().to_str().unwrap());

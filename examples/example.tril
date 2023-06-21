@@ -1,11 +1,22 @@
-extern printf(String, Int);
-
-fn foo(x: [Int; 3]) -> Int{
-  return x[0];
+struct Vec2{
+  x: Int,
+  y: Int,
 }
 
-fn main() -> Int{
-  let x = [69, 3, 5];
-  printf("%d \n", foo(x));
-  return 0;
+fn vec2(x: Int, y: Int) -> Vec2{
+  return Vec2{
+    x,
+    y,
+  };
 }
+
+fn add_vec2(a: Vec2, b: Vec2) -> Vec2{
+  return Vec2{
+    a.x + b.x,
+    a.y + b.y
+  };
+}
+
+// fn zero() -> Vec2{
+  // return vec2(0, 0);
+// }

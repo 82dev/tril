@@ -7,7 +7,7 @@ use crate::types::{StructType, FunctionType, Type};
 pub enum TopLevel{
   FnDecl(String, FunctionType, Vec<String>, Vec<Statement>),
   Extern(String, FunctionType),
-  StructDecl(StructType)
+  StructDecl(String, StructType)
 }
 
 #[derive(Debug)]
@@ -30,6 +30,8 @@ pub enum Expression{
   FnCall(FunctionCall),
   Variable(String, Type),
   ArrayIndex(String, Box<Expression>, RefCell<Type>),
+  StructConstructor(String, Vec<Box<Expression>>),
+  StructAccess(Box<Expression>, String, RefCell<u32>),
 }
 
 #[derive(Debug)]

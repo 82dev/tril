@@ -57,6 +57,8 @@ impl Lexer{
 
       ',' => self.add_token(TokenKind::Comma),
 
+      '.' => self.add_token(TokenKind::Dot),
+
       '=' => {
         if self.source[self.pos] == '='{
           self.add_token(TokenKind::EqualTo);
@@ -168,6 +170,8 @@ impl Lexer{
     let kind: TokenKind = match s.as_str(){
       "let" => TokenKind::Let,
       "fn" => TokenKind::FunctionDec,
+
+      "struct" => TokenKind::Struct,
 
       "if" => TokenKind::If,
       "else" => TokenKind::Else,
