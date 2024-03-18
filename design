@@ -1,0 +1,12 @@
+# Scope
+Small footprint, C-like
+Memory Safe
+Decently Fast
+
+#Features
+Staticly Typed
+ADT
+Loop Labels
+
+#Optional
+Nix like with blocks
