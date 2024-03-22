@@ -1,1 +1,1 @@
-/home/rshah/codeProjects/tril/trilc/target/debug/trilc: /home/rshah/codeProjects/tril/trilc/src/lexer.rs /home/rshah/codeProjects/tril/trilc/src/main.rs /home/rshah/codeProjects/tril/trilc/src/token.rs
+/home/rshah/codeProjects/tril/trilc/target/debug/trilc: /home/rshah/codeProjects/tril/trilc/src/lexer.rs /home/rshah/codeProjects/tril/trilc/src/main.rs /home/rshah/codeProjects/tril/trilc/src/node.rs /home/rshah/codeProjects/tril/trilc/src/parser.rs /home/rshah/codeProjects/tril/trilc/src/token.rs /home/rshah/codeProjects/tril/trilc/src/type.rs

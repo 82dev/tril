@@ -64,10 +64,10 @@ impl Lexer{
         }
         else{self.add_token(TokenKind::FSlash)}
       },
-      '=' => self.add_token(self.match_curr('=', TokenKind::EqualTo, TokenKind::Assign)),
-      '!' => self.add_token(self.match_curr('=', TokenKind::NotEqualTo, TokenKind::Bang)),
-      '<' => self.add_token(self.match_curr('=', TokenKind::LessThanEqualTo, TokenKind::LessThan)),
-      '>' => self.add_token(self.match_curr('=', TokenKind::GreaterThanEqualTo, TokenKind::GreaterThan)),
+      '=' => {let k = self.match_curr('=', TokenKind::EqualTo, TokenKind::Assign); self.add_token(k)},
+      '!' => {let k = self.match_curr('=', TokenKind::NotEqualTo, TokenKind::Bang); self.add_token(k)},
+      '<' => {let k = self.match_curr('=', TokenKind::LessThanEqualTo, TokenKind::LessThan); self.add_token(k)},
+      '>' => {let k = self.match_curr('=', TokenKind::GreaterThanEqualTo, TokenKind::GreaterThan); self.add_token(k)},
 
       '"' => self.string(),
       
@@ -118,12 +118,15 @@ impl Lexer{
       "let" => TokenKind::Let,
       "if" => TokenKind::If,
       "else" => TokenKind::Else,
+      "ret" => TokenKind::Ret,
+      "while" => TokenKind::While,
       _ => TokenKind::Identifier(s)
     })
   }
 
   fn string(&mut self){
     let mut result = String::new();
+    let last = self.current;
     while self.source[self.current] != '"'{
       if self.source[self.current] == '\\'{
         self.advance();
@@ -140,6 +143,7 @@ impl Lexer{
       
       result.push(self.advance());
       if self.is_at_end(){
+        let src: String = self.source.iter().collect();
         panic!("{}", format!("Unterminating string at line: {}, col: {}", self.line, self.col));
       }
     }
@@ -148,9 +152,9 @@ impl Lexer{
   }
 
   //return k1 if current == c else k2
-  fn match_curr(&self, c: char, k1: TokenKind, k2: TokenKind) -> TokenKind{
+  fn match_curr(&mut self, c: char, k1: TokenKind, k2: TokenKind) -> TokenKind{
     match self.source[self.current]{
-      k if k == c => k1,
+      k if k == c => {self.advance(); k1},
       _ => k2
     }
   }

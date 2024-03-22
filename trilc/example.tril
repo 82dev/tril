@@ -1,0 +1,7 @@
+if 2 == 2{
+  let a = 3;
+  let b: float = 3.0;
+} 
+else {
+  ret 3;
+}

@@ -1,5 +1,6 @@
 #[derive(PartialEq)]
 #[derive(Debug)]
+#[derive(Clone)]
 pub enum TokenKind{
   BraceOpen,
   BraceClose,
@@ -29,6 +30,8 @@ pub enum TokenKind{
   Let,
   If,
   Else,
+  Ret,
+  While,
 
   Identifier(String),
   IntLiteral(i64),
@@ -38,9 +41,9 @@ pub enum TokenKind{
 
 #[derive(Debug)]
 pub struct Token{
-  kind: TokenKind,
-  line: u32,
-  col: u32,
+  pub kind: TokenKind,
+  pub line: u32,
+  pub col: u32,
 }
 
 impl Token{
